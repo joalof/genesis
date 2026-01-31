@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+
+# Color codes for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m' # No Color
+
+# Configuration
+readonly LOCAL_DIR="${HOME}/.local"
+readonly DOTFILES_REPO="${DOTFILES_REPO:-}"  # Set via environment or prompt
+readonly DOTFILES_DIR="${HOME}/.dotfiles"
+
+#==============================================================================
+# Utility Functions
+#==============================================================================
+
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $*"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $*"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $*"
+}
+
+confirm() {
+    local prompt="$1"
+    local response
+    read -r -p "$prompt [y/N] " response
+    case "$response" in
+        [yY][eE][sS]|[yY])
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+#==============================================================================
+# Development Tools Installation
+#==============================================================================
+
+install_devtools() {
+    log_info "Installing development tools..."
+
+    local packages=(
+        # Version control
+        git
+
+        # Build stuff
+        build-essential
+        ninja-build
+        cmake
+        autoconf
+        automake
+        libtool
+        pkg-config
+        software-properties-common
+        apt-transport-https
+        ca-certificates
+        gnupg
+        lsb-release
+
+        # Utilities
+        gettext
+        unzip
+        curl
+        wget
+        xstow
+        strace
+        jq
+        ripgrep
+        fd-find
+        htop
+        tree
+
+        # GTK and UI libraries
+        libgtk-4-dev
+        libadwaita-1-dev
+        gtk4-layer-shell
+
+        # misc
+        keychain 
+    )
+
+    log_info "Installing: ${packages[*]}"
+
+    sudo apt install -y "${packages[@]}"
+
+    log_success "Development tools installed"
+}
+
+#==============================================================================
+# Local Directory Structure Setup
+#==============================================================================
+
+setup_dir_structure() {
+    log_info "Setting up .local directory structure..."
+
+    local directories=(
+        "${LOCAL_DIR}/bin"
+        "${LOCAL_DIR}/lib"
+        "${LOCAL_DIR}/share"
+        "${LOCAL_DIR}/include"
+        "${LOCAL_DIR}/etc"
+        "${LOCAL_DIR}/src"
+        "${HOME}/apps"
+        "${HOME}/scratch"
+        "${HOME}/code"
+        "${HOME}/projects"
+        "${HOME}/.config"
+    )
+
+    for dir in "${directories[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            mkdir -p "$dir"
+            log_info "Created: $dir"
+        else
+            log_warning "Already exists: $dir"
+        fi
+    done
+
+    # Ensure .local/bin is in PATH
+    if [[ ":$PATH:" != *":${LOCAL_DIR}/bin:"* ]]; then
+        log_info "Adding ${LOCAL_DIR}/bin to PATH"
+
+        # Add to .bashrc if it exists
+        if [[ -f "${HOME}/.bashrc" ]]; then
+            if ! grep -q "${LOCAL_DIR}/bin" "${HOME}/.bashrc"; then
+                echo '' >> "${HOME}/.bashrc"
+                echo '# Add .local/bin to PATH' >> "${HOME}/.bashrc"
+                echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${HOME}/.bashrc"
+                log_info "Added to .bashrc"
+            fi
+        fi
+
+        # Add to .profile if it exists
+        if [[ -f "${HOME}/.profile" ]]; then
+            if ! grep -q "${LOCAL_DIR}/bin" "${HOME}/.profile"; then
+                echo '' >> "${HOME}/.profile"
+                echo '# Add .local/bin to PATH' >> "${HOME}/.profile"
+                echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${HOME}/.profile"
+                log_info "Added to .profile"
+            fi
+        fi
+    fi
+
+    log_success "Local directory structure setup complete"
+}
+
+#==============================================================================
+# Dotfiles Setup
+#==============================================================================
+
+setup_dotfiles() {
+    log_info "Setting up dotfiles..."
+
+    local repo="$DOTFILES_REPO"
+
+    # Prompt for repository if not set
+    if [[ -z "$repo" ]]; then
+        read -r -p "Enter dotfiles repository URL: " repo
+    fi
+
+    if [[ -z "$repo" ]]; then
+        log_error "No dotfiles repository provided"
+        return 1
+    fi
+
+    # Clone or update dotfiles
+    if [[ -d "$DOTFILES_DIR" ]]; then
+        log_warning "Dotfiles directory already exists at $DOTFILES_DIR"
+        if confirm "Update existing dotfiles?"; then
+            cd "$DOTFILES_DIR"
+            git pull
+            log_success "Dotfiles updated"
+        fi
+    else
+        log_info "Cloning dotfiles from $repo"
+        git clone "$repo" "$DOTFILES_DIR"
+        log_success "Dotfiles cloned"
+    fi
+
+    # Run install script if it exists
+    local install_script="${DOTFILES_DIR}/install.sh"
+    if [[ -f "$install_script" ]]; then
+        log_info "Running dotfiles install script..."
+        cd "$DOTFILES_DIR"
+        chmod +x "$install_script"
+        ./"$install_script"
+        log_success "Dotfiles installed"
+    else
+        log_warning "No install.sh script found in dotfiles repository"
+    fi
+}
+
+#==============================================================================
+# Install Scripts Execution
+#==============================================================================
+
+run_install_scripts() {
+    log_info "Running install scripts..."
+
+    local install_scripts_dir="${PWD}/install_scripts"
+
+    # Check if install_scripts directory exists
+    if [[ ! -d "$install_scripts_dir" ]]; then
+        log_warning "No install_scripts directory found at $install_scripts_dir"
+        return 0
+    fi
+
+    # Find all .sh files in the directory
+    local scripts=()
+    while IFS= read -r -d '' script; do
+        scripts+=("$script")
+    done < <(find "$install_scripts_dir" -maxdepth 1 -type f -name "*.sh" -print0 | sort -z)
+
+    # Check if any scripts were found
+    if [[ ${#scripts[@]} -eq 0 ]]; then
+        log_warning "No shell scripts found in $install_scripts_dir"
+        return 0
+    fi
+
+    log_info "Found ${#scripts[@]} script(s) to execute"
+
+    # Execute each script
+    local failed_scripts=()
+    for script in "${scripts[@]}"; do
+        local script_name=$(basename "$script")
+        log_info "Executing: $script_name"
+
+        # Make script executable
+        chmod +x "$script"
+
+        # Run the script
+        if "$script"; then
+            log_success "Completed: $script_name"
+        else
+            log_error "Failed: $script_name"
+            failed_scripts+=("$script_name")
+        fi
+    done
+
+    # Report results
+    if [[ ${#failed_scripts[@]} -eq 0 ]]; then
+        log_success "All install scripts completed successfully"
+    else
+        log_error "The following scripts failed:"
+        for failed in "${failed_scripts[@]}"; do
+            log_error "  - $failed"
+        done
+        return 1
+    fi
+}
+
+#==============================================================================
+# Main Execution
+#==============================================================================
+
+main() {
+    log_info "Starting Genesis setup..."
+    echo ""
+
+    # Check if running on Ubuntu or derivative
+    if ! grep -qi "ubuntu\|debian\|mint\|pop" /etc/os-release 2>/dev/null; then
+        log_warning "This script is designed for Ubuntu-based systems"
+        if ! confirm "Continue anyway?"; then
+            exit 1
+        fi
+    fi
+
+    # Local Directory Structure
+    echo ""
+    log_info "Step: Local Directory Structure"
+    setup_dir_structure
+    
+    # System Update
+    echo ""
+    log_info "Updating system packages..."
+    sudo apt update
+    sudo apt upgrade -y
+    
+    # Development Tools Installation
+    echo ""
+    log_info "Step: Development Tools Installation"
+    install_devtools
+
+    # Dotfiles Setup
+    echo ""
+    log_info "Step: Dotfiles Setup"
+    setup_dotfiles
+
+    # Install Scripts Execution
+    echo ""
+    log_info "Step: Install Scripts Execution"
+    run_install_scripts
+
+    echo ""
+    log_success "Genesis setup complete!"
+    echo ""
+    log_info "You may need to restart your shell or run: source ~/.bashrc"
+}
+
+# Run main function
+main "$@"
