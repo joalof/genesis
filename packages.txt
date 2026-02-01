@@ -1,0 +1,40 @@
+# Build tools
+python3
+python-is-python3
+git
+build-essential
+ninja-build
+cmake
+autoconf
+automake
+libtool
+pkg-config
+software-properties-common
+apt-transport-https
+ca-certificates
+gnupg
+lsb-release
+
+# Utilities
+gettext
+unzip
+curl
+wget
+xstow
+strace
+jq
+ripgrep
+fd-find
+htop
+tree
+
+# Building ghostty
+libgtk-4-dev
+libadwaita-1-dev
+gtk4-layer-shell
+
+# Misc
+keychain
+feh
+zathura
+ffmpeg
