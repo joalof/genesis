@@ -58,6 +58,8 @@ install_devtools() {
 
     local packages=(
         # Build stuff
+        python3
+        python-is-python3
         git
         build-essential
         ninja-build
