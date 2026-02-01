@@ -399,9 +399,6 @@ show_main_menu() {
 }
 
 main() {
-    log_info "Starting Genesis setup..."
-    echo ""
-
     # Check if running on Ubuntu or derivative
     if ! grep -qi "ubuntu\|debian\|mint\|pop" /etc/os-release 2>/dev/null; then
         log_warning "This script is designed for Ubuntu-based systems"
@@ -409,6 +406,32 @@ main() {
             exit 1
         fi
     fi
+    
+    log_info "Starting Genesis setup..."
+    echo ""
+
+    # Ensure ~/.local/bin is on PATH for this script
+    if [[ ":$PATH:" != *":${LOCAL_DIR}/bin:"* ]]; then
+        export PATH="${LOCAL_DIR}/bin:$PATH"
+        log_info "Added ${LOCAL_DIR}/bin to PATH for this session"
+    fi
+
+    # Check if symfarm executable exists, create symlink if needed
+    if ! command -v symfarm &> /dev/null; then
+        local symfarm_target="${SCRIPT_DIR}/genesis"
+        local symfarm_link="${LOCAL_DIR}/bin/symfarm"
+
+        if [[ -f "$symfarm_target" ]]; then
+            mkdir -p "${LOCAL_DIR}/bin"
+            ln -sf "$symfarm_target" "$symfarm_link"
+            log_success "Created symlink: $symfarm_link -> $symfarm_target"
+        else
+            log_warning "Could not find genesis script to create symfarm symlink"
+        fi
+    else
+        log_info "symfarm executable already exists in PATH"
+    fi
+
 
     # Show main menu
     show_main_menu
