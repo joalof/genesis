@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""symfarm.py - A minimal symlink farm manager similar to GNU Stow."""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+
+DEFAULT_FOLDERS = ["bin", "lib", "share", "man", "etc", "include", "lib64"]
+
+
+def create_symlink(source: Path, target: Path, delete: bool = False) -> None:
+    """Create or delete a symlink.
+
+    Args:
+        source: The source file to link to.
+        target: The symlink path to create.
+        delete: If True, delete the symlink instead of creating it.
+    """
+    if delete:
+        if target.is_symlink():
+            resolved_target = target.resolve()
+            resolved_source = source.resolve()
+            if resolved_target == resolved_source:
+                target.unlink()
+                print(f"Deleted: {target}")
+            else:
+                print(f"Skipped (points elsewhere): {target}")
+        elif target.exists():
+            print(f"Skipped (not a symlink): {target}")
+    else:
+        # Create parent directory if it doesn't exist
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        if target.is_symlink():
+            resolved_target = target.resolve()
+            resolved_source = source.resolve()
+            if resolved_target == resolved_source:
+                print(f"Already exists: {target}")
+            else:
+                print(f"Conflict: {target} points to {resolved_target}")
+        elif target.exists():
+            print(f"Conflict: {target} already exists (not a symlink)")
+        else:
+            target.symlink_to(source)
+            print(f"Created: {target} -> {source}")
+
+
+def find_files_recursive(input_dir: Path, folders: List[str]) -> Dict[str, List[Tuple[Path, str]]]:
+    """Find files recursively in specified folders.
+
+    Searches the input directory tree for any directory matching the folder names,
+    and collects all files within them. The resulting symlinks will be flat, so
+    foo/bar/bin/x will create a symlink bin/x.
+
+    Args:
+        input_dir: The input directory to search.
+        folders: List of folder names to search for.
+
+    Returns:
+        Dictionary mapping folder names to lists of (source_path, filename) tuples.
+    """
+    results: Dict[str, List[Tuple[Path, str]]] = {folder: [] for folder in folders}
+
+    for folder in folders:
+        # Search for all occurrences of this folder name in the tree
+        for root, dirs, files in os.walk(input_dir):
+            root_path = Path(root)
+
+            # Check if current directory name matches our target folder
+            if root_path.name == folder:
+                for file in files:
+                    source = root_path / file
+                    results[folder].append((source, file))
+
+    return results
+
+
+def find_files_non_recursive(input_dir: Path, folders: List[str]) -> Dict[str, List[Tuple[Path, str]]]:
+    """Find files in direct subfolders only.
+
+    Only processes direct children of the input directory, not nested subdirectories.
+
+    Args:
+        input_dir: The input directory to search.
+        folders: List of folder names to search for.
+
+    Returns:
+        Dictionary mapping folder names to lists of (source_path, filename) tuples.
+    """
+    results: Dict[str, List[Tuple[Path, str]]] = {folder: [] for folder in folders}
+
+    for folder in folders:
+        folder_path = input_dir / folder
+        if folder_path.is_dir():
+            for item in folder_path.iterdir():
+                if item.is_file():
+                    results[folder].append((item, item.name))
+
+    return results
+
+
+def process_symlinks(
+    input_dir: Path,
+    output_dir: Path,
+    folders: List[str],
+    recursive: bool = False,
+    delete: bool = False,
+) -> None:
+    """Process symlinks for the given directories.
+
+    Creates or deletes symlinks from the output directory to files in the input directory.
+    Only processes files in the specified folder names.
+
+    Args:
+        input_dir: The input directory containing files to link.
+        output_dir: The output directory where symlinks will be created.
+        folders: List of folder names to process (e.g., 'bin', 'lib', 'share').
+        recursive: If True, search recursively for files.
+        delete: If True, delete symlinks instead of creating them.
+    """
+    if recursive:
+        files_map = find_files_recursive(input_dir, folders)
+    else:
+        files_map = find_files_non_recursive(input_dir, folders)
+
+    for folder, files in files_map.items():
+        for source, name in files:
+            target = output_dir / folder / name
+            create_symlink(source, target, delete)
+
+
+def main() -> None:
+    """Main entry point for the script."""
+    parser = argparse.ArgumentParser(
+        description="A minimal symlink farm manager similar to GNU Stow.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s ~/myapp
+    Create symlinks from ~/.local to files in ~/myapp/{bin,lib,share,...}
+
+  %(prog)s ~/myapp -o ~/custom
+    Create symlinks in ~/custom instead of ~/.local
+
+  %(prog)s ~/myapp -r
+    Recursively search for bin/, lib/, etc. folders and create flat symlinks
+
+  %(prog)s ~/myapp -D
+    Delete symlinks previously created from ~/myapp
+        """,
+    )
+
+    parser.add_argument(
+        "input_dir",
+        type=str,
+        help="Input directory containing files to link",
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=os.path.expanduser("~/.local"),
+        help="Output directory for symlinks (default: ~/.local)",
+    )
+
+    parser.add_argument(
+        "-D",
+        "--delete",
+        action="store_true",
+        help="Delete symlinks instead of creating them",
+    )
+
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Search recursively in input dir, creating flat symlinks",
+    )
+
+    parser.add_argument(
+        "-f",
+        "--folders",
+        type=str,
+        nargs="+",
+        default=DEFAULT_FOLDERS,
+        help=f"Folders to process (default: {' '.join(DEFAULT_FOLDERS)})",
+    )
+
+    args = parser.parse_args()
+
+    # Expand and resolve paths
+    input_dir = Path(args.input_dir).expanduser().resolve()
+    output_dir = Path(args.output).expanduser().resolve()
+
+    # Validate input directory
+    if not input_dir.exists():
+        print(f"Error: Input directory does not exist: {input_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    if not input_dir.is_dir():
+        print(f"Error: Input path is not a directory: {input_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    # Process symlinks
+    process_symlinks(input_dir, output_dir, args.folders, args.recursive, args.delete)
+
+
+if __name__ == "__main__":
+    main()
