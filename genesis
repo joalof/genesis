@@ -57,10 +57,8 @@ install_devtools() {
     log_info "Installing development tools..."
 
     local packages=(
-        # Version control
-        git
-
         # Build stuff
+        git
         build-essential
         ninja-build
         cmake
@@ -87,13 +85,16 @@ install_devtools() {
         htop
         tree
 
-        # GTK and UI libraries
+        # building ghostty
         libgtk-4-dev
         libadwaita-1-dev
         gtk4-layer-shell
 
         # misc
         keychain 
+        feh
+        zathura
+        ffmpeg
     )
 
     log_info "Installing: ${packages[*]}"
@@ -132,32 +133,6 @@ setup_dir_structure() {
             log_warning "Already exists: $dir"
         fi
     done
-
-    # Ensure .local/bin is in PATH
-    if [[ ":$PATH:" != *":${LOCAL_DIR}/bin:"* ]]; then
-        log_info "Adding ${LOCAL_DIR}/bin to PATH"
-
-        # Add to .bashrc if it exists
-        if [[ -f "${HOME}/.bashrc" ]]; then
-            if ! grep -q "${LOCAL_DIR}/bin" "${HOME}/.bashrc"; then
-                echo '' >> "${HOME}/.bashrc"
-                echo '# Add .local/bin to PATH' >> "${HOME}/.bashrc"
-                echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${HOME}/.bashrc"
-                log_info "Added to .bashrc"
-            fi
-        fi
-
-        # Add to .profile if it exists
-        if [[ -f "${HOME}/.profile" ]]; then
-            if ! grep -q "${LOCAL_DIR}/bin" "${HOME}/.profile"; then
-                echo '' >> "${HOME}/.profile"
-                echo '# Add .local/bin to PATH' >> "${HOME}/.profile"
-                echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${HOME}/.profile"
-                log_info "Added to .profile"
-            fi
-        fi
-    fi
-
     log_success "Local directory structure setup complete"
 }
 
