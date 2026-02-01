@@ -14,6 +14,8 @@ readonly NC='\033[0m' # No Color
 readonly LOCAL_DIR="${HOME}/.local"
 readonly DOTFILES_REPO="${DOTFILES_REPO:-}"  # Set via environment or prompt
 readonly DOTFILES_DIR="${HOME}/.dotfiles"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PACKAGES_FILE="${SCRIPT_DIR}/packages.txt"
 
 #==============================================================================
 # Utility Functions
@@ -56,50 +58,27 @@ confirm() {
 install_devtools() {
     log_info "Installing development tools..."
 
-    local packages=(
-        # Build stuff
-        python3
-        python-is-python3
-        git
-        build-essential
-        ninja-build
-        cmake
-        autoconf
-        automake
-        libtool
-        pkg-config
-        software-properties-common
-        apt-transport-https
-        ca-certificates
-        gnupg
-        lsb-release
+    # Check if packages file exists
+    if [[ ! -f "$PACKAGES_FILE" ]]; then
+        log_error "Packages file not found: $PACKAGES_FILE"
+        return 1
+    fi
 
-        # Utilities
-        gettext
-        unzip
-        curl
-        wget
-        xstow
-        strace
-        jq
-        ripgrep
-        fd-find
-        htop
-        tree
+    # Read packages from file, skipping comments and empty lines
+    local packages=()
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        # Trim whitespace and add to array
+        packages+=("$(echo "$line" | xargs)")
+    done < "$PACKAGES_FILE"
 
-        # building ghostty
-        libgtk-4-dev
-        libadwaita-1-dev
-        gtk4-layer-shell
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        log_error "No packages found in $PACKAGES_FILE"
+        return 1
+    fi
 
-        # misc
-        keychain 
-        feh
-        zathura
-        ffmpeg
-    )
-
-    log_info "Installing: ${packages[*]}"
+    log_info "Installing ${#packages[@]} packages from $PACKAGES_FILE"
 
     sudo apt install -y "${packages[@]}"
 
