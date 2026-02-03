@@ -1,0 +1,6 @@
+{
+    "name": "gcloud",
+    "dependencies": [],
+    "artifacts": ["gcloud", "bq", "gsutil", "docker-credential-gcloud"],
+    "platforms": ["linux", "wsl"]
+}

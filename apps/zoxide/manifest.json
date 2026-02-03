@@ -1,0 +1,6 @@
+{
+    "name": "zoxide",
+    "dependencies": [],
+    "artifacts": ["zoxide"],
+    "platforms": ["linux", "wsl"]
+}

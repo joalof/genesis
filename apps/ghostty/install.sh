@@ -1,14 +1,13 @@
-if [[ -n ${WSL_DISTRO_NAME} ]]; then
-    echo "WSL detected -> we use windows native Wezterm instead"
-    exit 0
-fi
-origin=$pwd
-
-# then install ghostty
+#!/usr/bin/env bash
+# download tip
+cd ~/.local/src
 wget https://github.com/ghostty-org/ghostty/releases/download/tip/ghostty-source.tar.gz
 tar xf ghostty-source.tar.gz
+rm ghostty-source.tar.gz
 cd ghostty-source
 
-zig build -p $HOME/.local -Doptimize=ReleaseFast
-# TODO install binary
-cd $origin
+# install
+install_dir=$HOME/apps/ghossty
+mkdir 2>/dev/null ${install_dir}
+zig build -p ${install_dir} -Doptimize=ReleaseFast
+symfarm ${install_dir}

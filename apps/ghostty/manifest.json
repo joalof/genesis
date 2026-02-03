@@ -1,0 +1,6 @@
+{
+    "name": "ghostty",
+    "dependencies": ["zig"],
+    "artifacts": ["ghostty"],
+    "platforms": ["linux"]
+}

@@ -1,0 +1,6 @@
+{
+    "name": "neovim",
+    "dependencies": [],
+    "artifacts": ["nvim"],
+    "platforms": ["linux", "wsl"]
+}

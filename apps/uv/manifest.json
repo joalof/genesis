@@ -1,0 +1,6 @@
+{
+    "name": "uv",
+    "dependencies": [],
+    "artifacts": ["uv", "uvx"],
+    "platforms": ["linux", "wsl"]
+}

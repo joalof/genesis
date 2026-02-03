@@ -1,0 +1,6 @@
+{
+    "name": "fzf",
+    "dependencies": [],
+    "artifacts": ["fzf"],
+    "platforms": ["linux", "wsl"]
+}

@@ -1,0 +1,6 @@
+{
+    "name": "rust",
+    "dependencies": [],
+    "artifacts": ["rustc", "rustup", "cargo"],
+    "platforms": ["linux", "wsl"]
+}
