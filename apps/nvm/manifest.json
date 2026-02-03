@@ -1,0 +1,6 @@
+{
+    "name": "nvm",
+    "dependencies": [],
+    "artifacts": ["nvm"],
+    "platforms": ["linux", "wsl"]
+}

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ARCH="x86_64-linux"
-INSTALL_DIR="/opt/zig"
+INSTALL_DIR="$HOME/apps/zig"
 
 # Fetch latest stable version and tarball URL
 JSON=$(curl -fsSL https://ziglang.org/download/index.json)
@@ -21,5 +21,4 @@ mkdir -p "$INSTALL_DIR"
 tar -xJf zig.tar.xz -C "$INSTALL_DIR" --strip-components=1
 rm zig.tar.xz
 
-echo "Zig installed in $INSTALL_DIR"
-echo "Add to PATH: export PATH=\"$INSTALL_DIR:\$PATH\""
+symfarm ${INSTALL_DIR}

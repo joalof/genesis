@@ -1,1 +1,2 @@
+#!/usr/bin/env bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
