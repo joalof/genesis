@@ -15,10 +15,14 @@ echo "Downloading: $TARBALL_URL"
 
 curl -fsSL "$TARBALL_URL" -o zig.tar.xz
 
-rm -rf "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR"
+STAGING_DIR="${INSTALL_DIR}.new"
+rm -rf "$STAGING_DIR"
+mkdir -p "$STAGING_DIR"
 
-tar -xJf zig.tar.xz -C "$INSTALL_DIR" --strip-components=1
+tar -xJf zig.tar.xz -C "$STAGING_DIR" --strip-components=1
 rm zig.tar.xz
 
-symfarm ${INSTALL_DIR}
+# swap in only on success — preserves the old install if extraction fails
+rm -rf "$INSTALL_DIR"
+mv "$STAGING_DIR" "$INSTALL_DIR"
+symfarm "${INSTALL_DIR}"
