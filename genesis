@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -80,24 +81,38 @@ class Component:
     """An installable unit discovered under a category directory.
 
     Attributes:
-        name: Parent-directory name of the install.sh file; also the binary
-            name used for post-install verification.
+        name: Parent-directory name of the install.sh file.
         category: Top-level category ("toolchains" or "apps").
         script: Absolute path to install.sh.
+        dependencies: Names of other components that must be installed first.
+        artifacts: Binary names produced by the installer; used for verification.
+        platforms: Platform tags this component supports ("linux", "wsl").
     """
 
-    name:     str
-    category: str
-    script:   Path
+    name:         str
+    category:     str
+    script:       Path
+    dependencies: tuple[str, ...]
+    artifacts:    tuple[str, ...]
+    platforms:    tuple[str, ...]
 
     @property
     def installed(self) -> bool:
-        """True when a binary matching name exists somewhere on PATH."""
-        return shutil.which(self.name) is not None
+        """True when every declared artifact exists somewhere on PATH."""
+        return all(shutil.which(a) is not None for a in self.artifacts)
+
+
+def current_platform() -> str:
+    """Return 'wsl' when WSL_DISTRO_NAME is set, otherwise 'linux'."""
+    return "wsl" if os.environ.get("WSL_DISTRO_NAME") else "linux"
 
 
 def discover_components(category_dir: Path) -> list[Component]:
     """Walk a category directory and return every install.sh as a Component.
+
+    Each sub-directory that contains an install.sh is expected to also have a
+    manifest.json.  When the manifest is missing the component falls back to
+    safe defaults (no dependencies, artifact == component name, all platforms).
 
     Args:
         category_dir: Root directory for one category (e.g. <repo>/apps).
@@ -105,15 +120,58 @@ def discover_components(category_dir: Path) -> list[Component]:
     Returns:
         Components sorted alphabetically by name.
     """
-    category = category_dir.name
-    return sorted(
-        (
-            Component(name=s.parent.name, category=category, script=s)
-            for s in category_dir.rglob("install.sh")
-            if s.is_file()
-        ),
-        key=lambda c: c.name,
-    )
+    category   = category_dir.name
+    components: list[Component] = []
+    for script in category_dir.rglob("install.sh"):
+        if not script.is_file():
+            continue
+        name          = script.parent.name
+        manifest_path = script.parent / "manifest.json"
+        manifest: dict = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+        components.append(Component(
+            name=name,
+            category=category,
+            script=script,
+            dependencies=tuple(manifest.get("dependencies", [])),
+            artifacts=tuple(manifest.get("artifacts", [name])),
+            platforms=tuple(manifest.get("platforms", ["linux", "wsl"])),
+        ))
+    return sorted(components, key=lambda c: c.name)
+
+
+def resolve_order(components: list[Component]) -> list[Component]:
+    """Topological sort so that dependencies install before dependents.
+
+    Only dependencies present in *components* affect ordering; external
+    dependencies (already installed or provided by an earlier step) are
+    ignored for ordering purposes.  Assumes no circular dependencies.
+
+    Args:
+        components: The components to order.
+
+    Returns:
+        A new list in a valid install order.
+    """
+    by_name = {c.name: c for c in components}
+    in_degree  = {c.name: sum(1 for d in c.dependencies if d in by_name) for c in components}
+    dependents: dict[str, list[str]] = {c.name: [] for c in components}
+    for c in components:
+        for d in c.dependencies:
+            if d in dependents:
+                dependents[d].append(c.name)
+
+    # Kahn's algorithm; sorted queue keeps output deterministic.
+    ready  = sorted(n for n, deg in in_degree.items() if deg == 0)
+    order: list[Component] = []
+    while ready:
+        name = ready.pop(0)
+        order.append(by_name[name])
+        for dependent in sorted(dependents[name]):
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                ready.append(dependent)
+                ready.sort()
+    return order
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +179,7 @@ def discover_components(category_dir: Path) -> list[Component]:
 # ---------------------------------------------------------------------------
 
 #: Canonical step ordering; also the valid --step values.
-STEPS: tuple[str, ...] = ("dirs", "sysupgrade", "devtools", "dotfiles", "toolchains", "apps")
+STEPS: tuple[str, ...] = ("dirs", "sysupgrade", "devtools", "dotfiles", "apps")
 
 #: Prompts shown for each step in custom mode.
 STEP_PROMPTS: dict[str, str] = {
@@ -129,7 +187,6 @@ STEP_PROMPTS: dict[str, str] = {
     "sysupgrade": "Update system packages?",
     "devtools":   "Install development tools?",
     "dotfiles":   "Setup dotfiles?",
-    "toolchains": "Install toolchains?",
     "apps":       "Install apps?",
 }
 
@@ -349,9 +406,10 @@ class Genesis:
             return
 
         logger.info("Step: %s Installation", category.capitalize())
-        components = discover_components(category_dir)
+        platform   = current_platform()
+        components = [c for c in discover_components(category_dir) if platform in c.platforms]
         if not components:
-            logger.info("No %s components found", category)
+            logger.info("No %s components found for platform %s", category, platform)
             return
 
         selected = self._select_components(components) if interactive else components
@@ -359,6 +417,17 @@ class Genesis:
             logger.info("No %s components selected for installation", category)
             return
 
+        # Warn about dependencies that are neither selected nor already on PATH.
+        selected_names = {c.name for c in selected}
+        for comp in selected:
+            for dep in comp.dependencies:
+                if dep not in selected_names and not shutil.which(dep):
+                    logger.warning(
+                        "%s depends on %s which is not selected and not found in PATH",
+                        comp.name, dep,
+                    )
+
+        selected = resolve_order(selected)
         logger.info("Installing %d %s component(s)", len(selected), category)
 
         failed: list[str] = []
@@ -375,9 +444,10 @@ class Genesis:
             logger.info("Completed: %s/%s", comp.category, comp.name)
 
             if not comp.installed:
+                missing = [a for a in comp.artifacts if not shutil.which(a)]
                 logger.error(
-                    "Verification failed: %s/%s binary not found in PATH",
-                    comp.category, comp.name,
+                    "Verification failed: %s/%s — missing artifacts: %s",
+                    comp.category, comp.name, ", ".join(missing),
                 )
                 failed.append(f"{comp.category}/{comp.name} (verification failed)")
 
@@ -404,8 +474,7 @@ class Genesis:
             "sysupgrade": self.sysupgrade,
             "devtools":   self.install_devtools,
             "dotfiles":   self.setup_dotfiles,
-            "toolchains": lambda: self.install_category("toolchains", interactive=interactive),
-            "apps":       lambda: self.install_category("apps",       interactive=interactive),
+            "apps":       lambda: self.install_category("apps", interactive=interactive),
         }
         dispatch[step]()
 
