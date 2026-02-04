@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Genesis – Development environment bootstrap for Ubuntu-based systems.
-
-Usage:
-    genesis.py                      Interactive main menu.
-    genesis.py --all                Complete installation, no prompts.
-    genesis.py --custom             Step-by-step prompted installation.
-    genesis.py --step dirs apps     Run only the named steps (canonical order).
-"""
 
 from __future__ import annotations
 
@@ -22,11 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Interactive helpers
-# ---------------------------------------------------------------------------
 
 
 def confirm(prompt: str) -> bool:
@@ -71,30 +58,23 @@ def parse_selection(raw: str, count: int) -> list[int]:
     return list(dict.fromkeys(indices))
 
 
-# ---------------------------------------------------------------------------
-# Component discovery
-# ---------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class Component:
     """An installable unit discovered under a category directory.
 
     Attributes:
         name: Parent-directory name of the install.sh file.
-        category: Top-level category ("toolchains" or "apps").
         script: Absolute path to install.sh.
         dependencies: Names of other components that must be installed first.
         artifacts: Binary names produced by the installer; used for verification.
         platforms: Platform tags this component supports ("linux", "wsl").
     """
 
-    name:         str
-    category:     str
-    script:       Path
+    name: str
+    script: Path
     dependencies: tuple[str, ...]
-    artifacts:    tuple[str, ...]
-    platforms:    tuple[str, ...]
+    artifacts: tuple[str, ...]
+    platforms: tuple[str, ...]
 
     @property
     def installed(self) -> bool:
@@ -107,8 +87,8 @@ def current_platform() -> str:
     return "wsl" if os.environ.get("WSL_DISTRO_NAME") else "linux"
 
 
-def discover_components(category_dir: Path) -> list[Component]:
-    """Walk a category directory and return every install.sh as a Component.
+def discover_components(app_dir: Path) -> list[Component]:
+    """Walk a directory and return every install.sh as a Component.
 
     Each sub-directory that contains an install.sh is expected to also have a
     manifest.json.  When the manifest is missing the component falls back to
@@ -120,22 +100,24 @@ def discover_components(category_dir: Path) -> list[Component]:
     Returns:
         Components sorted alphabetically by name.
     """
-    category   = category_dir.name
     components: list[Component] = []
-    for script in category_dir.rglob("install.sh"):
+    for script in app_dir.rglob("install.sh"):
         if not script.is_file():
             continue
-        name          = script.parent.name
+        name = script.parent.name
         manifest_path = script.parent / "manifest.json"
-        manifest: dict = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
-        components.append(Component(
-            name=name,
-            category=category,
-            script=script,
-            dependencies=tuple(manifest.get("dependencies", [])),
-            artifacts=tuple(manifest.get("artifacts", [name])),
-            platforms=tuple(manifest.get("platforms", ["linux", "wsl"])),
-        ))
+        manifest: dict = (
+            json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+        )
+        components.append(
+            Component(
+                name=name,
+                script=script,
+                dependencies=tuple(manifest.get("dependencies", [])),
+                artifacts=tuple(manifest.get("artifacts", [name])),
+                platforms=tuple(manifest.get("platforms", ["linux", "wsl"])),
+            )
+        )
     return sorted(components, key=lambda c: c.name)
 
 
@@ -153,7 +135,9 @@ def resolve_order(components: list[Component]) -> list[Component]:
         A new list in a valid install order.
     """
     by_name = {c.name: c for c in components}
-    in_degree  = {c.name: sum(1 for d in c.dependencies if d in by_name) for c in components}
+    in_degree = {
+        c.name: sum(1 for d in c.dependencies if d in by_name) for c in components
+    }
     dependents: dict[str, list[str]] = {c.name: [] for c in components}
     for c in components:
         for d in c.dependencies:
@@ -161,7 +145,7 @@ def resolve_order(components: list[Component]) -> list[Component]:
                 dependents[d].append(c.name)
 
     # Kahn's algorithm; sorted queue keeps output deterministic.
-    ready  = sorted(n for n, deg in in_degree.items() if deg == 0)
+    ready = sorted(n for n, deg in in_degree.items() if deg == 0)
     order: list[Component] = []
     while ready:
         name = ready.pop(0)
@@ -183,15 +167,15 @@ STEPS: tuple[str, ...] = ("dirs", "sysupgrade", "devtools", "dotfiles", "apps")
 
 #: Prompts shown for each step in custom mode.
 STEP_PROMPTS: dict[str, str] = {
-    "dirs":       "Setup local directory structure?",
+    "dirs": "Setup local directory structure?",
     "sysupgrade": "Update system packages?",
-    "devtools":   "Install development tools?",
-    "dotfiles":   "Setup dotfiles?",
-    "apps":       "Install apps?",
+    "devtools": "Install development tools?",
+    "dotfiles": "Setup dotfiles?",
+    "apps": "Install apps?",
 }
 
 #: Directories to create under $HOME (relative paths).
-_HOME_DIRS: tuple[str, ...] = (
+HOME_DIRS: tuple[str, ...] = (
     ".local/bin",
     ".local/lib",
     ".local/share",
@@ -204,11 +188,6 @@ _HOME_DIRS: tuple[str, ...] = (
     "projects",
     ".config",
 )
-
-
-# ---------------------------------------------------------------------------
-# Main installer class
-# ---------------------------------------------------------------------------
 
 
 class Genesis:
@@ -228,14 +207,10 @@ class Genesis:
         Args:
             script_dir: Typically Path(__file__).resolve().parent.
         """
-        self.script_dir    = script_dir
-        self.local_dir     = Path.home() / ".local"
-        self.dotfiles_dir  = Path.home() / ".dotfiles"
+        self.script_dir = script_dir
+        self.local_dir = Path.home() / ".local"
+        self.dotfiles_dir = Path.home() / ".dotfiles"
         self.packages_file = script_dir / "packages.txt"
-
-    # ------------------------------------------------------------------
-    # Bootstrap
-    # ------------------------------------------------------------------
 
     def bootstrap(self) -> None:
         """Ensure ~/.local/bin is on PATH and the symfarm symlink exists."""
@@ -249,7 +224,7 @@ class Genesis:
             return
 
         target = self.script_dir / "symfarm"
-        link   = self.local_dir / "bin" / "symfarm"
+        link = self.local_dir / "bin" / "symfarm"
         if target.is_file():
             link.parent.mkdir(parents=True, exist_ok=True)
             link.unlink(missing_ok=True)
@@ -258,15 +233,11 @@ class Genesis:
         else:
             logger.warning("Could not find symfarm script to create symlink")
 
-    # ------------------------------------------------------------------
-    # dirs
-    # ------------------------------------------------------------------
-
     def setup_dirs(self) -> None:
         """Create the standard directory skeleton under $HOME."""
         logger.info("Setting up .local directory structure...")
         home = Path.home()
-        for rel in _HOME_DIRS:
+        for rel in HOME_DIRS:
             path = home / rel
             if path.is_dir():
                 logger.warning("Already exists: %s", path)
@@ -275,19 +246,11 @@ class Genesis:
                 logger.info("Created: %s", path)
         logger.info("Local directory structure setup complete")
 
-    # ------------------------------------------------------------------
-    # sysupgrade
-    # ------------------------------------------------------------------
-
     def sysupgrade(self) -> None:
         """Run sudo apt update followed by sudo apt upgrade."""
         logger.info("Updating system packages...")
         subprocess.run(["sudo", "apt", "update"], check=True)
         subprocess.run(["sudo", "apt", "upgrade", "-y"], check=True)
-
-    # ------------------------------------------------------------------
-    # devtools
-    # ------------------------------------------------------------------
 
     def install_devtools(self) -> None:
         """Read packages.txt and install every listed package via apt.
@@ -313,10 +276,6 @@ class Genesis:
         logger.info("Installing %d packages from %s", len(packages), self.packages_file)
         subprocess.run(["sudo", "apt", "install", "-y", *packages], check=True)
         logger.info("Development tools installed")
-
-    # ------------------------------------------------------------------
-    # dotfiles
-    # ------------------------------------------------------------------
 
     def setup_dotfiles(self) -> None:
         """Clone or update the dotfiles repo, then run its install.sh.
@@ -355,10 +314,6 @@ class Genesis:
             logger.info("Dotfiles installed")
         else:
             logger.warning("No install.sh script found in dotfiles repository")
-
-    # ------------------------------------------------------------------
-    # Component installation (toolchains / apps)
-    # ------------------------------------------------------------------
 
     def _select_components(self, components: list[Component]) -> list[Component]:
         """Display a numbered menu and return the components the user chose.
@@ -406,8 +361,10 @@ class Genesis:
             return
 
         logger.info("Step: %s Installation", category.capitalize())
-        platform   = current_platform()
-        components = [c for c in discover_components(category_dir) if platform in c.platforms]
+        platform = current_platform()
+        components = [
+            c for c in discover_components(category_dir) if platform in c.platforms
+        ]
         if not components:
             logger.info("No %s components found for platform %s", category, platform)
             return
@@ -424,7 +381,8 @@ class Genesis:
                 if dep not in selected_names and not shutil.which(dep):
                     logger.warning(
                         "%s depends on %s which is not selected and not found in PATH",
-                        comp.name, dep,
+                        comp.name,
+                        dep,
                     )
 
         selected = resolve_order(selected)
@@ -447,7 +405,9 @@ class Genesis:
                 missing = [a for a in comp.artifacts if not shutil.which(a)]
                 logger.error(
                     "Verification failed: %s/%s — missing artifacts: %s",
-                    comp.category, comp.name, ", ".join(missing),
+                    comp.category,
+                    comp.name,
+                    ", ".join(missing),
                 )
                 failed.append(f"{comp.category}/{comp.name} (verification failed)")
 
@@ -458,10 +418,6 @@ class Genesis:
         else:
             logger.info("All %s install scripts completed successfully", category)
 
-    # ------------------------------------------------------------------
-    # Step dispatch
-    # ------------------------------------------------------------------
-
     def run_step(self, step: str, *, interactive: bool = True) -> None:
         """Execute a single named installation step.
 
@@ -470,17 +426,14 @@ class Genesis:
             interactive: Forwarded to install_category for toolchains/apps.
         """
         dispatch = {
-            "dirs":       self.setup_dirs,
+            "dirs": self.setup_dirs,
             "sysupgrade": self.sysupgrade,
-            "devtools":   self.install_devtools,
-            "dotfiles":   self.setup_dotfiles,
-            "apps":       lambda: self.install_category("apps", interactive=interactive),
+            "devtools": self.install_devtools,
+            "dotfiles": self.setup_dotfiles,
+            "apps": lambda: self.install_category("apps", interactive=interactive),
         }
         dispatch[step]()
 
-    # ------------------------------------------------------------------
-    # High-level modes
-    # ------------------------------------------------------------------
 
     def install_all(self) -> None:
         """Run every step non-interactively in canonical order."""
@@ -499,65 +452,7 @@ class Genesis:
                 self.run_step(step, interactive=True)
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def _check_platform() -> None:
-    """Warn and optionally abort when not running on an Ubuntu derivative."""
-    try:
-        content = Path("/etc/os-release").read_text().lower()
-    except FileNotFoundError:
-        content = ""
-
-    if not any(tag in content for tag in ("ubuntu", "debian", "mint", "pop")):
-        logger.warning("This script is designed for Ubuntu-based systems")
-        if not confirm("Continue anyway?"):
-            sys.exit(1)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    """Create the argument parser for the genesis CLI.
-
-    Returns:
-        Configured ArgumentParser.  The flags --all, --custom, and --step are
-        mutually exclusive.  Omitting all three triggers the interactive main
-        menu at runtime.
-    """
-    parser = argparse.ArgumentParser(
-        prog="genesis",
-        description="Development environment bootstrap for Ubuntu-based systems.",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--all",
-        action="store_true",
-        help="Complete installation – run every step without prompting.",
-    )
-    group.add_argument(
-        "--custom",
-        action="store_true",
-        help="Custom installation – prompt before each step.",
-    )
-    group.add_argument(
-        "--step",
-        nargs="+",
-        choices=STEPS,
-        metavar="STEP",
-        help=f"Run only the named step(s) in canonical order.  "
-             f"Valid steps: {', '.join(STEPS)}",
-    )
-    parser.add_argument(
-        "--log-level",
-        default="WARNING",
-        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
-        help="Set the logging verbosity (default: WARNING).",
-    )
-    return parser
-
-
-def _show_interactive_menu(genesis: Genesis) -> None:
+def show_interactive_menu(genesis: Genesis) -> None:
     """Display the welcome menu and dispatch the user's choice.
 
     Args:
@@ -587,17 +482,58 @@ def _show_interactive_menu(genesis: Genesis) -> None:
 
 def main() -> None:
     """Entry point: parse flags, validate the platform, and run Genesis."""
-    args = build_parser().parse_args()
-    logging.basicConfig(level=getattr(logging, args.log_level), format="[%(levelname)s] %(message)s")
+    parser = argparse.ArgumentParser(
+        prog="genesis",
+        description="Development environment bootstrap for Ubuntu-based systems.",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Complete installation – run every step without prompting.",
+    )
+    group.add_argument(
+        "--custom",
+        action="store_true",
+        help="Custom installation – prompt before each step.",
+    )
+    group.add_argument(
+        "--step",
+        nargs="+",
+        choices=STEPS,
+        metavar="STEP",
+        help=f"Run only the named step(s) in canonical order.  "
+        f"Valid steps: {', '.join(STEPS)}",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="WARNING",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        help="Set the logging verbosity (default: WARNING).",
+    )
+    args = parser.parse_args()
 
-    _check_platform()
+    logging.basicConfig(
+        level=getattr(logging, args.log_level), format="[%(levelname)s] %(message)s"
+    )
 
+    # Warn and optionally abort when not running on an Ubuntu derivative
+    try:
+        content = Path("/etc/os-release").read_text().lower()
+    except FileNotFoundError:
+        content = ""
+
+    if not any(tag in content for tag in ("ubuntu", "debian", "mint", "pop")):
+        logger.warning("This script is designed for Ubuntu-based systems")
+        if not confirm("Continue anyway?"):
+            sys.exit(1)
+    
+    # 
+    # Begin genesis
+    #  
     genesis = Genesis(Path(__file__).resolve().parent)
-
     logger.info("Starting Genesis setup...")
-    print()
     genesis.bootstrap()
-
     try:
         if args.all:
             genesis.install_all()
@@ -611,7 +547,7 @@ def main() -> None:
                     print()
                     genesis.run_step(step, interactive=True)
         else:
-            _show_interactive_menu(genesis)
+            show_interactive_menu(genesis)
     except subprocess.CalledProcessError as exc:
         logger.error("Command failed (exit %d): %s", exc.returncode, exc.cmd)
         sys.exit(exc.returncode)
@@ -620,9 +556,7 @@ def main() -> None:
         logger.info("Interrupted by user")
         sys.exit(130)
 
-    print()
     logger.info("Genesis setup complete!")
-    print()
     logger.info("You may need to restart your shell or run: source ~/.bashrc")
 
 
