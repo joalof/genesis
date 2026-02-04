@@ -59,8 +59,8 @@ def parse_selection(raw: str, count: int) -> list[int]:
 
 
 @dataclass(frozen=True)
-class Component:
-    """An installable unit discovered under a category directory.
+class Application:
+    """An installable unit.
 
     Attributes:
         name: Parent-directory name of the install.sh file.
@@ -77,7 +77,7 @@ class Component:
     platforms: tuple[str, ...]
 
     @property
-    def installed(self) -> bool:
+    def is_installed(self) -> bool:
         """True when every declared artifact exists somewhere on PATH."""
         return all(shutil.which(a) is not None for a in self.artifacts)
 
@@ -87,7 +87,7 @@ def current_platform() -> str:
     return "wsl" if os.environ.get("WSL_DISTRO_NAME") else "linux"
 
 
-def discover_components(app_dir: Path) -> list[Component]:
+def discover_applications(root_dir: Path) -> list[Application]:
     """Walk a directory and return every install.sh as a Component.
 
     Each sub-directory that contains an install.sh is expected to also have a
@@ -100,8 +100,8 @@ def discover_components(app_dir: Path) -> list[Component]:
     Returns:
         Components sorted alphabetically by name.
     """
-    components: list[Component] = []
-    for script in app_dir.rglob("install.sh"):
+    components: list[Application] = []
+    for script in root_dir.rglob("install.sh"):
         if not script.is_file():
             continue
         name = script.parent.name
@@ -110,7 +110,7 @@ def discover_components(app_dir: Path) -> list[Component]:
             json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
         )
         components.append(
-            Component(
+            Application(
                 name=name,
                 script=script,
                 dependencies=tuple(manifest.get("dependencies", [])),
@@ -121,7 +121,7 @@ def discover_components(app_dir: Path) -> list[Component]:
     return sorted(components, key=lambda c: c.name)
 
 
-def resolve_order(components: list[Component]) -> list[Component]:
+def resolve_order(applications: list[Application]) -> list[Application]:
     """Topological sort so that dependencies install before dependents.
 
     Only dependencies present in *components* affect ordering; external
@@ -134,19 +134,19 @@ def resolve_order(components: list[Component]) -> list[Component]:
     Returns:
         A new list in a valid install order.
     """
-    by_name = {c.name: c for c in components}
+    by_name = {c.name: c for c in applications}
     in_degree = {
-        c.name: sum(1 for d in c.dependencies if d in by_name) for c in components
+        c.name: sum(1 for d in c.dependencies if d in by_name) for c in applications
     }
-    dependents: dict[str, list[str]] = {c.name: [] for c in components}
-    for c in components:
+    dependents: dict[str, list[str]] = {c.name: [] for c in applications}
+    for c in applications:
         for d in c.dependencies:
             if d in dependents:
                 dependents[d].append(c.name)
 
     # Kahn's algorithm; sorted queue keeps output deterministic.
     ready = sorted(n for n, deg in in_degree.items() if deg == 0)
-    order: list[Component] = []
+    order: list[Application] = []
     while ready:
         name = ready.pop(0)
         order.append(by_name[name])
@@ -315,7 +315,7 @@ class Genesis:
         else:
             logger.warning("No install.sh script found in dotfiles repository")
 
-    def _select_components(self, components: list[Component]) -> list[Component]:
+    def _select_applications(self, components: list[Application]) -> list[Application]:
         """Display a numbered menu and return the components the user chose.
 
         Args:
@@ -326,7 +326,7 @@ class Genesis:
         """
         print()
         for idx, comp in enumerate(components, 1):
-            badge = "[installed]" if comp.installed else "[not installed]"
+            badge = "[installed]" if comp.is_installed else "[not installed]"
             print(f"  {idx:2d}) {comp.name:<20s} {badge}")
         print()
         print("Selection options:")
@@ -347,76 +347,73 @@ class Genesis:
             return []
         return [components[i] for i in parse_selection(raw, len(components))]
 
-    def install_category(self, category: str, *, interactive: bool = True) -> None:
+    def install_applications(self, interactive: bool = True) -> None:
         """Discover, optionally select, and execute install.sh for a category.
 
         Args:
-            category: Subdirectory name ("toolchains" or "apps").
             interactive: When True the user picks components; otherwise every
                 component is installed.
         """
-        category_dir = self.script_dir / category
-        if not category_dir.is_dir():
-            logger.warning("No %s directory found at %s", category, category_dir)
+        app_dir = self.script_dir / 'apps'
+        if not app_dir.is_dir():
+            logger.warning("No directory found at %s", app_dir)
             return
 
-        logger.info("Step: %s Installation", category.capitalize())
         platform = current_platform()
-        components = [
-            c for c in discover_components(category_dir) if platform in c.platforms
+        applications = [
+            c for c in discover_applications(app_dir) if platform in c.platforms
         ]
-        if not components:
-            logger.info("No %s components found for platform %s", category, platform)
+        if not applications:
+            logger.info("No applications found for %s", platform)
             return
 
-        selected = self._select_components(components) if interactive else components
-        if not selected:
-            logger.info("No %s components selected for installation", category)
+        selected_applications = self._select_applications(applications) if interactive else applications
+        if not selected_applications:
+            logger.info("No %s components selected for installation")
             return
 
         # Warn about dependencies that are neither selected nor already on PATH.
-        selected_names = {c.name for c in selected}
-        for comp in selected:
-            for dep in comp.dependencies:
+        selected_names = {c.name for c in selected_applications}
+        for app in selected_applications:
+            for dep in app.dependencies:
                 if dep not in selected_names and not shutil.which(dep):
                     logger.warning(
                         "%s depends on %s which is not selected and not found in PATH",
-                        comp.name,
+                        app.name,
                         dep,
                     )
 
-        selected = resolve_order(selected)
-        logger.info("Installing %d %s component(s)", len(selected), category)
+        selected_applications = resolve_order(selected_applications)
+        logger.info("Installing %d application(s)", len(selected_applications))
 
         failed: list[str] = []
-        for comp in selected:
-            logger.info("Installing %s/%s...", comp.category, comp.name)
-            comp.script.chmod(0o755)
+        for app in selected_applications:
+            logger.info("Installing %s...", app.name)
+            app.script.chmod(0o755)
 
-            result = subprocess.run([str(comp.script)], cwd=comp.script.parent)
+            result = subprocess.run([str(app.script)], cwd=app.script.parent)
             if result.returncode != 0:
-                logger.error("Failed: %s/%s", comp.category, comp.name)
-                failed.append(f"{comp.category}/{comp.name} (install failed)")
+                logger.error("Failed: %s", app.name)
+                failed.append(f"{app.name} (install failed)")
                 continue
 
-            logger.info("Completed: %s/%s", comp.category, comp.name)
+            logger.info("Completed: %s", app.name)
 
-            if not comp.installed:
-                missing = [a for a in comp.artifacts if not shutil.which(a)]
+            if not app.is_installed:
+                missing = [a for a in app.artifacts if not shutil.which(a)]
                 logger.error(
-                    "Verification failed: %s/%s — missing artifacts: %s",
-                    comp.category,
-                    comp.name,
+                    "Verification failed: %s — missing artifacts: %s",
+                    app.name,
                     ", ".join(missing),
                 )
-                failed.append(f"{comp.category}/{comp.name} (verification failed)")
+                failed.append(f"{app.name} (verification failed)")
 
         if failed:
-            logger.error("The following %s components failed:", category)
+            logger.error("The following applications failed:")
             for entry in failed:
                 logger.error("  - %s", entry)
         else:
-            logger.info("All %s install scripts completed successfully", category)
+            logger.info("All install scripts completed successfully")
 
     def run_step(self, step: str, *, interactive: bool = True) -> None:
         """Execute a single named installation step.
@@ -430,7 +427,7 @@ class Genesis:
             "sysupgrade": self.sysupgrade,
             "devtools": self.install_devtools,
             "dotfiles": self.setup_dotfiles,
-            "apps": lambda: self.install_category("apps", interactive=interactive),
+            "apps": lambda: self.install_applications(interactive=interactive),
         }
         dispatch[step]()
 
