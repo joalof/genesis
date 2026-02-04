@@ -386,15 +386,25 @@ class Genesis:
         selected_applications = resolve_order(selected_applications)
         logger.info("Installing %d application(s)", len(selected_applications))
 
-        failed: list[str] = []
+        failed: dict[str, str] = {}  # name -> reason
         for app in selected_applications:
+            broken_deps = [d for d in app.dependencies if d in failed]
+            if broken_deps:
+                logger.warning(
+                    "Skipping %s: dependency %s failed",
+                    app.name,
+                    ", ".join(broken_deps),
+                )
+                failed[app.name] = "skipped — dependency failed"
+                continue
+
             logger.info("Installing %s...", app.name)
             app.script.chmod(0o755)
 
             result = subprocess.run([str(app.script)], cwd=app.script.parent)
             if result.returncode != 0:
                 logger.error("Failed: %s", app.name)
-                failed.append(f"{app.name} (install failed)")
+                failed[app.name] = "install failed"
                 continue
 
             logger.info("Completed: %s", app.name)
@@ -406,12 +416,12 @@ class Genesis:
                     app.name,
                     ", ".join(missing),
                 )
-                failed.append(f"{app.name} (verification failed)")
+                failed[app.name] = "verification failed"
 
         if failed:
             logger.error("The following applications failed:")
-            for entry in failed:
-                logger.error("  - %s", entry)
+            for name, reason in failed.items():
+                logger.error("  - %s (%s)", name, reason)
         else:
             logger.info("All install scripts completed successfully")
 
@@ -460,18 +470,21 @@ def show_interactive_menu(genesis: Genesis) -> None:
     print("========================================")
     print("1) Complete Installation (all steps)")
     print("2) Custom Installation (select steps)")
-    print("3) Exit")
+    print("3) Install Apps")
+    print("4) Exit")
     print()
 
     try:
-        choice = input("Select an option [1-3]: ").strip()
+        choice = input("Select an option [1-4]: ").strip()
     except (EOFError, KeyboardInterrupt):
-        choice = "3"
+        choice = "4"
 
     if choice == "1":
         genesis.install_all()
     elif choice == "2":
         genesis.install_custom()
+    elif choice == "3":
+        genesis.install_applications(interactive=True)
     else:
         logger.info("Exiting...")
         sys.exit(0)
