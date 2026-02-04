@@ -65,9 +65,9 @@ class Application:
     Attributes:
         name: Parent-directory name of the install.sh file.
         script: Absolute path to install.sh.
-        dependencies: Names of other components that must be installed first.
+        dependencies: Names of other apps that must be installed first.
         artifacts: Binary names produced by the installer; used for verification.
-        platforms: Platform tags this component supports ("linux", "wsl").
+        platforms: Platform tags this app supports ("linux", "wsl").
     """
 
     name: str
@@ -88,19 +88,19 @@ def current_platform() -> str:
 
 
 def discover_applications(root_dir: Path) -> list[Application]:
-    """Walk a directory and return every install.sh as a Component.
+    """Walk a directory and return every install.sh as an Application.
 
     Each sub-directory that contains an install.sh is expected to also have a
-    manifest.json.  When the manifest is missing the component falls back to
-    safe defaults (no dependencies, artifact == component name, all platforms).
+    manifest.json.  When the manifest is missing the app falls back to
+    safe defaults (no dependencies, artifact == app name, all platforms).
 
     Args:
         category_dir: Root directory for one category (e.g. <repo>/apps).
 
     Returns:
-        Components sorted alphabetically by name.
+        Applications sorted alphabetically by name.
     """
-    components: list[Application] = []
+    applications: list[Application] = []
     for script in root_dir.rglob("install.sh"):
         if not script.is_file():
             continue
@@ -109,7 +109,7 @@ def discover_applications(root_dir: Path) -> list[Application]:
         manifest: dict = (
             json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
         )
-        components.append(
+        applications.append(
             Application(
                 name=name,
                 script=script,
@@ -118,18 +118,18 @@ def discover_applications(root_dir: Path) -> list[Application]:
                 platforms=tuple(manifest.get("platforms", ["linux", "wsl"])),
             )
         )
-    return sorted(components, key=lambda c: c.name)
+    return sorted(applications, key=lambda c: c.name)
 
 
 def resolve_order(applications: list[Application]) -> list[Application]:
     """Topological sort so that dependencies install before dependents.
 
-    Only dependencies present in *components* affect ordering; external
+    Only dependencies present in *applications* affect ordering; external
     dependencies (already installed or provided by an earlier step) are
     ignored for ordering purposes.  Assumes no circular dependencies.
 
     Args:
-        components: The components to order.
+        applications: The apps to order.
 
     Returns:
         A new list in a valid install order.
@@ -157,10 +157,6 @@ def resolve_order(applications: list[Application]) -> list[Application]:
                 ready.sort()
     return order
 
-
-# ---------------------------------------------------------------------------
-# Configuration constants
-# ---------------------------------------------------------------------------
 
 #: Canonical step ordering; also the valid --step values.
 STEPS: tuple[str, ...] = ("dirs", "sysupgrade", "devtools", "dotfiles", "apps")
@@ -315,46 +311,46 @@ class Genesis:
         else:
             logger.warning("No install.sh script found in dotfiles repository")
 
-    def _select_applications(self, components: list[Application]) -> list[Application]:
-        """Display a numbered menu and return the components the user chose.
+    def _select_applications(self, applications: list[Application]) -> list[Application]:
+        """Display a numbered menu and return the apps the user chose.
 
         Args:
-            components: All components available in the category.
+            applications: All available apps.
 
         Returns:
             The subset selected by the user, possibly empty.
         """
         print()
-        for idx, comp in enumerate(components, 1):
+        for idx, comp in enumerate(applications, 1):
             badge = "[installed]" if comp.is_installed else "[not installed]"
             print(f"  {idx:2d}) {comp.name:<20s} {badge}")
         print()
         print("Selection options:")
         print("  a) Install all")
         print("  n) Install none")
-        print("  #) Enter component numbers (e.g., 1,3,5 or 1-3 or 1 2 4)")
+        print("  #) Enter app numbers (e.g., 1,3,5 or 1-3 or 1 2 4)")
         print()
 
         try:
-            raw = input("Select components to install: ").strip()
+            raw = input("Select apps to install: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return []
 
         if raw.lower() == "a":
-            return components
+            return applications
         if raw.lower() == "n":
             return []
-        return [components[i] for i in parse_selection(raw, len(components))]
+        return [applications[i] for i in parse_selection(raw, len(applications))]
 
     def install_applications(self, interactive: bool = True) -> None:
         """Discover, optionally select, and execute install.sh for a category.
 
         Args:
-            interactive: When True the user picks components; otherwise every
-                component is installed.
+            interactive: When True the user picks apps; otherwise every
+                app is installed.
         """
-        app_dir = self.script_dir / 'apps'
+        app_dir = self.script_dir / "apps"
         if not app_dir.is_dir():
             logger.warning("No directory found at %s", app_dir)
             return
@@ -367,9 +363,11 @@ class Genesis:
             logger.info("No applications found for %s", platform)
             return
 
-        selected_applications = self._select_applications(applications) if interactive else applications
+        selected_applications = (
+            self._select_applications(applications) if interactive else applications
+        )
         if not selected_applications:
-            logger.info("No %s components selected for installation")
+            logger.info("No apps selected for installation")
             return
 
         # Warn about dependencies that are neither selected nor already on PATH.
@@ -440,7 +438,6 @@ class Genesis:
             "apps": lambda: self.install_applications(interactive=interactive),
         }
         dispatch[step]()
-
 
     def install_all(self) -> None:
         """Run every step non-interactively in canonical order."""
@@ -537,10 +534,10 @@ def main() -> None:
         logger.warning("This script is designed for Ubuntu-based systems")
         if not confirm("Continue anyway?"):
             sys.exit(1)
-    
-    # 
+
+    #
     # Begin genesis
-    #  
+    #
     genesis = Genesis(Path(__file__).resolve().parent)
     logger.info("Starting Genesis setup...")
     genesis.bootstrap()
