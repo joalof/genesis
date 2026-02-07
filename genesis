@@ -101,6 +101,26 @@ def current_platform() -> str:
     return "wsl" if os.environ.get("WSL_DISTRO_NAME") else "linux"
 
 
+def detect_display_server() -> str | None:
+    """Detect the current display server (wayland or x11).
+
+    Returns:
+        'wayland' if Wayland is detected, 'x11' if X11 is detected, None otherwise.
+    """
+    # Check XDG_SESSION_TYPE first (most reliable)
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session_type in ("wayland", "x11"):
+        return session_type
+
+    # Fallback: check for display environment variables
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return "wayland"
+    if os.environ.get("DISPLAY"):
+        return "x11"
+
+    return None
+
+
 def discover_applications(root_dir: Path) -> list[Application]:
     """List sub-directories and return every contained install.sh as an Application.
 
@@ -190,7 +210,7 @@ class Genesis:
             config: typically read from config.json in SCRIPT_DIR.
         """
         self.config = config
-        self.packages_file = SCRIPT_DIR / "packages.txt"
+        self.packages_file = SCRIPT_DIR / "packages.json"
 
         self.app_dir = Path(config['app_dir']).expanduser()
         self.local_fhs = Path(config['local_fhs']).expanduser()
@@ -253,7 +273,7 @@ class Genesis:
         subprocess.run(["sudo", "apt", "upgrade", "-y"], check=True)
 
     def install_devtools(self) -> None:
-        """Read packages.txt and install every listed package via apt.
+        """Read packages.json and install packages based on current environment.
 
         Exits with an error log if the file is missing or empty.
         """
@@ -263,17 +283,34 @@ class Genesis:
             logger.error("Packages file not found: %s", self.packages_file)
             sys.exit(1)
 
-        packages = [
-            stripped
-            for raw in self.packages_file.read_text().splitlines()
-            if (stripped := raw.strip()) and not stripped.startswith("#")
-        ]
+        try:
+            package_data = json.loads(self.packages_file.read_text())
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse %s: %s", self.packages_file, e)
+            sys.exit(1)
+
+        # Start with general packages
+        packages = list(package_data.get("general", []))
+
+        # Add WSL-specific packages if running on WSL
+        platform = current_platform()
+        if platform == "wsl":
+            packages.extend(package_data.get("wsl", []))
+            logger.info("Detected WSL environment")
+
+        # Add display-server-specific packages
+        display_server = detect_display_server()
+        if display_server:
+            logger.info("Detected %s display server", display_server)
+            packages.extend(package_data.get(display_server, []))
+        else:
+            logger.warning("Could not detect display server (Wayland/X11)")
 
         if not packages:
             logger.error("No packages found in %s", self.packages_file)
             sys.exit(1)
 
-        logger.info("Installing %d packages from %s", len(packages), self.packages_file)
+        logger.info("Installing %d packages", len(packages))
         subprocess.run(["sudo", "apt", "install", "-y", *packages], check=True)
         logger.info("Development tools installed")
 
