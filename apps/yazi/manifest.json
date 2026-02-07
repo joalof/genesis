@@ -1,6 +1,6 @@
 {
-    "name": "starship",
+    "name": "yazi",
     "dependencies": ["rust"],
-    "artifacts": ["starship"],
+    "artifacts": ["yazi"],
     "platforms": ["linux", "wsl"]
 }
