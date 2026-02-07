@@ -1,0 +1,5 @@
+{
+  "app_dir": "~/apps/",
+  "local_fhs": "~/.local",
+  "dotfiles_repo": "git@github.com:joalof/genesis.git"
+}
