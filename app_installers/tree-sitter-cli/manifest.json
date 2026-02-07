@@ -1,0 +1,6 @@
+{
+    "name": "tree-sitter-cli",
+    "dependencies": ["rust"],
+    "artifacts": ["tree-sitter"],
+    "platforms": ["linux", "wsl"]
+}

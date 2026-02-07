@@ -10,11 +10,25 @@ import re
 import shutil
 import subprocess
 import sys
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+#: Canonical step ordering; also the valid --step values.
+STEPS: tuple[str, ...] = ("dirs", "sysupgrade", "devtools", "dotfiles", "apps")
+
+#: Prompts shown for each step in custom mode.
+STEP_PROMPTS: dict[str, str] = {
+    "dirs": "Setup local directory structure?",
+    "sysupgrade": "Update system packages?",
+    "devtools": "Install development tools?",
+    "dotfiles": "Setup dotfiles?",
+    "apps": "Install apps?",
+}
 
 def confirm(prompt: str) -> bool:
     """Ask the user a yes / no question.
@@ -158,59 +172,49 @@ def resolve_order(applications: list[Application]) -> list[Application]:
     return order
 
 
-#: Canonical step ordering; also the valid --step values.
-STEPS: tuple[str, ...] = ("dirs", "sysupgrade", "devtools", "dotfiles", "apps")
-
-#: Prompts shown for each step in custom mode.
-STEP_PROMPTS: dict[str, str] = {
-    "dirs": "Setup local directory structure?",
-    "sysupgrade": "Update system packages?",
-    "devtools": "Install development tools?",
-    "dotfiles": "Setup dotfiles?",
-    "apps": "Install apps?",
-}
-
-#: Directories to create under $HOME (relative paths).
-HOME_DIRS: tuple[str, ...] = (
-    ".local/bin",
-    ".local/lib",
-    ".local/share",
-    ".local/include",
-    ".local/etc",
-    ".local/src",
-    "apps",
-    "scratch",
-    "code",
-    "projects",
-    ".config",
-)
-
-DOTFILES_REPO = 'https://github.com/joalof/dotfiles.git'
-
-
 class Genesis:
     """Orchestrator that owns every bootstrap step.
 
     Attributes:
         script_dir: Directory containing this script and the category
             sub-directories (toolchains/, apps/).
-        local_dir: The ~/.local prefix.
+        local_fhs: The ~/.local prefix.
         packages_file: Path to packages.txt.
     """
 
-    def __init__(self, script_dir: Path) -> None:
+    def __init__(self, config: dict) -> None:
         """Initialise Genesis with the script's own directory.
 
         Args:
-            script_dir: Typically Path(__file__).resolve().parent.
+            config: typically read from config.json in SCRIPT_DIR.
         """
-        self.script_dir = script_dir
-        self.local_dir = Path.home() / ".local"
-        self.packages_file = script_dir / "packages.txt"
+        self.config = config
+        self.packages_file = SCRIPT_DIR / "packages.txt"
 
+        self.app_dir = Path(config['app_dir']).expanduser()
+        self.local_fhs = Path(config['local_fhs']).expanduser()
+        self.dotfiles_repo = config['dotfiles_repo']
+
+        #: Directories to create under $HOME (relative paths).
+        self.dir_structure: tuple[Path, ...] = (
+            self.local_fhs / 'bin',
+            self.local_fhs / 'lib',
+            self.local_fhs / 'share',
+            self.local_fhs / 'include',
+            self.local_fhs / 'etc',
+            self.local_fhs / 'src',
+            self.local_fhs / 'man',
+            self.local_fhs / 'lib64',
+            Path.home() / 'apps',
+            Path.home() / 'scratch',
+            Path.home() / 'code',
+            Path.home() / 'projects',
+            Path.home() / '.config',
+        )
+    
     def bootstrap(self) -> None:
         """Ensure ~/.local/bin is on PATH and the symfarm symlink exists."""
-        bin_dir = str(self.local_dir / "bin")
+        bin_dir = str(self.local_fhs / "bin")
         if bin_dir not in os.environ.get("PATH", "").split(os.pathsep):
             os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
             logger.info("Added %s to PATH for this session", bin_dir)
@@ -219,8 +223,8 @@ class Genesis:
             logger.info("symfarm executable already exists in PATH")
             return
 
-        target = self.script_dir / "symfarm"
-        link = self.local_dir / "bin" / "symfarm"
+        target = SCRIPT_DIR / "symfarm"
+        link = self.local_fhs / "bin" / "symfarm"
         if target.is_file():
             link.parent.mkdir(parents=True, exist_ok=True)
             link.unlink(missing_ok=True)
@@ -231,10 +235,9 @@ class Genesis:
 
     def setup_dirs(self) -> None:
         """Create the standard directory skeleton under $HOME."""
-        logger.info("Setting up .local directory structure...")
+        logger.info("Setting up directory structure...")
         home = Path.home()
-        for rel in HOME_DIRS:
-            path = home / rel
+        for path in self.dir_structure:
             if path.is_dir():
                 logger.warning("Already exists: %s", path)
             else:
@@ -278,9 +281,9 @@ class Genesis:
         """
         logger.info("Setting up dotfiles...")
         if not shutil.which('chezmoi'):
-            subprocess.run('curl -fsLS get.chezmoi.io | sh', cwd=self.local_dir, shell=True, check=True)
-        subprocess.run(['chezmoi', 'init',  DOTFILES_REPO], cwd=self.script_dir, check=True)
-        subprocess.run(['chezmoi', 'apply'], cwd=self.script_dir, check=True)
+            subprocess.run('curl -fsLS get.chezmoi.io | sh', cwd=self.local_fhs, shell=True, check=True)
+        subprocess.run(['chezmoi', 'init',  self.dotfiles_repo], cwd=SCRIPT_DIR, check=True)
+        subprocess.run(['chezmoi', 'apply'], cwd=SCRIPT_DIR, check=True)
 
     def _select_applications(self, applications: list[Application]) -> list[Application]:
         """Display a numbered menu and return the apps the user chose.
@@ -294,7 +297,7 @@ class Genesis:
         print()
         for idx, comp in enumerate(applications, 1):
             badge = "[installed]" if comp.is_installed else "[not installed]"
-            print(f"  {idx:2d}) {comp.name:<20s} {badge}")
+            print(f"  {idx:2d} {comp.name:<20s} {badge}")
         print()
         print("Selection options:")
         print("  a) Install all")
@@ -321,14 +324,14 @@ class Genesis:
             interactive: When True the user picks apps; otherwise every
                 app is installed.
         """
-        app_dir = self.script_dir / "apps"
-        if not app_dir.is_dir():
-            logger.warning("No directory found at %s", app_dir)
+        app_installers = SCRIPT_DIR / 'app_installers'
+        if not app_installers.is_dir():
+            logger.warning("No directory found at %s", app_installers)
             return
 
         platform = current_platform()
         applications = [
-            c for c in discover_applications(app_dir) if platform in c.platforms
+            c for c in discover_applications(app_installers) if platform in c.platforms
         ]
         if not applications:
             logger.info("No applications found for %s", platform)
@@ -509,7 +512,11 @@ def main() -> None:
     #
     # Begin genesis
     #
-    genesis = Genesis(Path(__file__).resolve().parent)
+
+    with open(SCRIPT_DIR / 'config.json', 'r') as fp:
+        config = json.load(fp)
+
+    genesis = Genesis(config)
     logger.info("Starting Genesis setup...")
     genesis.bootstrap()
     try:
