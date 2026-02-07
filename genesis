@@ -185,6 +185,8 @@ HOME_DIRS: tuple[str, ...] = (
     ".config",
 )
 
+DOTFILES_REPO = 'https://github.com/joalof/dotfiles.git'
+
 
 class Genesis:
     """Orchestrator that owns every bootstrap step.
@@ -193,7 +195,6 @@ class Genesis:
         script_dir: Directory containing this script and the category
             sub-directories (toolchains/, apps/).
         local_dir: The ~/.local prefix.
-        dotfiles_dir: Clone target for the dotfiles repository.
         packages_file: Path to packages.txt.
     """
 
@@ -205,7 +206,6 @@ class Genesis:
         """
         self.script_dir = script_dir
         self.local_dir = Path.home() / ".local"
-        self.dotfiles_dir = Path.home() / ".dotfiles"
         self.packages_file = script_dir / "packages.txt"
 
     def bootstrap(self) -> None:
@@ -274,42 +274,13 @@ class Genesis:
         logger.info("Development tools installed")
 
     def setup_dotfiles(self) -> None:
-        """Clone or update the dotfiles repo, then run its install.sh.
-
-        The remote URL is taken from the DOTFILES_REPO environment variable.
-        When unset the user is prompted interactively.
+        """Clone or update the dotfiles repo.
         """
         logger.info("Setting up dotfiles...")
-
-        repo = os.environ.get("DOTFILES_REPO", "").strip()
-        if not repo:
-            try:
-                repo = input("Enter dotfiles repository URL: ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-
-        if not repo:
-            logger.error("No dotfiles repository provided")
-            return
-
-        if self.dotfiles_dir.is_dir():
-            logger.warning("Dotfiles directory already exists at %s", self.dotfiles_dir)
-            if confirm("Update existing dotfiles?"):
-                subprocess.run(["git", "pull"], cwd=self.dotfiles_dir, check=True)
-                logger.info("Dotfiles updated")
-        else:
-            logger.info("Cloning dotfiles from %s", repo)
-            subprocess.run(["git", "clone", repo, str(self.dotfiles_dir)], check=True)
-            logger.info("Dotfiles cloned")
-
-        install_script = self.dotfiles_dir / "install.sh"
-        if install_script.is_file():
-            logger.info("Running dotfiles install script...")
-            install_script.chmod(0o755)
-            subprocess.run([str(install_script)], cwd=self.dotfiles_dir, check=True)
-            logger.info("Dotfiles installed")
-        else:
-            logger.warning("No install.sh script found in dotfiles repository")
+        if not shutil.which('chezmoi'):
+            subprocess.run('curl -fsLS get.chezmoi.io | sh', cwd=self.local_dir, shell=True, check=True)
+        subprocess.run(['chezmoi', 'init',  DOTFILES_REPO], cwd=self.script_dir, check=True)
+        subprocess.run(['chezmoi', 'apply'], cwd=self.script_dir, check=True)
 
     def _select_applications(self, applications: list[Application]) -> list[Application]:
         """Display a numbered menu and return the apps the user chose.
@@ -399,7 +370,7 @@ class Genesis:
             logger.info("Installing %s...", app.name)
             app.script.chmod(0o755)
 
-            result = subprocess.run([str(app.script)], cwd=app.script.parent)
+            result = subprocess.run(['bash', str(app.script)], cwd=app.script.parent)
             if result.returncode != 0:
                 logger.error("Failed: %s", app.name)
                 failed[app.name] = "install failed"

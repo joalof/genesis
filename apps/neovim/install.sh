@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd ~/.local/src/
 git clone https://github.com/neovim/neovim.git
 cd neovim/
 git checkout nightly

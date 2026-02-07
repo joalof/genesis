@@ -1,6 +1,6 @@
 {
     "name": "starship",
-    "dependencies": [],
+    "dependencies": ["rust"],
     "artifacts": ["starship"],
     "platforms": ["linux", "wsl"]
 }
