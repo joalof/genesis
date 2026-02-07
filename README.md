@@ -12,6 +12,7 @@ Certain settings can be customized via the `config.json` file such as which gith
 
 ## App system
 Installation scripts for apps and tool chains are organized in the following directory structre:
+```
 .
 ├── apps
 │   ├── app1
@@ -21,6 +22,7 @@ Installation scripts for apps and tool chains are organized in the following dir
 │   │   ├── install.sh
 │   │   └── manifest.json
 
+```
 Here, `manifest.json` contains a minimal set of metadata required for `genesis` to manage the installation process.
 ```json {
     "name": "app_name",
