@@ -102,7 +102,7 @@ def current_platform() -> str:
 
 
 def discover_applications(root_dir: Path) -> list[Application]:
-    """Walk a directory and return every install.sh as an Application.
+    """List sub-directories and return every contained install.sh as an Application.
 
     Each sub-directory that contains an install.sh is expected to also have a
     manifest.json.  When the manifest is missing the app falls back to
@@ -115,14 +115,15 @@ def discover_applications(root_dir: Path) -> list[Application]:
         Applications sorted alphabetically by name.
     """
     applications: list[Application] = []
-    for script in root_dir.rglob("install.sh"):
+    for script_dir in root_dir.iterdir():
+        script = script_dir / 'install.sh'
         if not script.is_file():
             continue
-        name = script.parent.name
         manifest_path = script.parent / "manifest.json"
         manifest: dict = (
             json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
         )
+        name = manifest.get('name', script.parent.name)
         applications.append(
             Application(
                 name=name,
@@ -373,7 +374,7 @@ class Genesis:
             logger.info("Installing %s...", app.name)
             app.script.chmod(0o755)
 
-            result = subprocess.run(['bash', str(app.script)], cwd=app.script.parent)
+            result = subprocess.run(['bash', str(app.script)], cwd=self.local_fhs / 'src')
             if result.returncode != 0:
                 logger.error("Failed: %s", app.name)
                 failed[app.name] = "install failed"
