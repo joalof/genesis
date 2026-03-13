@@ -11,13 +11,14 @@ from typing import Dict, List, Tuple
 DEFAULT_FOLDERS = ["bin", "lib", "share", "man", "etc", "include", "lib64"]
 
 
-def create_symlink(source: Path, target: Path, delete: bool = False) -> None:
+def create_symlink(source: Path, target: Path, delete: bool = False, force: bool = False) -> None:
     """Create or delete a symlink.
 
     Args:
         source: The source file to link to.
         target: The symlink path to create.
         delete: If True, delete the symlink instead of creating it.
+        force: If True, overwrite conflicting files or symlinks.
     """
     if delete:
         if target.is_symlink():
@@ -39,10 +40,19 @@ def create_symlink(source: Path, target: Path, delete: bool = False) -> None:
             resolved_source = source.resolve()
             if resolved_target == resolved_source:
                 print(f"Already exists: {target}")
+            elif force:
+                target.unlink()
+                target.symlink_to(source)
+                print(f"Replaced: {target} -> {source}")
             else:
                 print(f"Conflict: {target} points to {resolved_target}")
         elif target.exists():
-            print(f"Conflict: {target} already exists (not a symlink)")
+            if force:
+                target.unlink()
+                target.symlink_to(source)
+                print(f"Replaced: {target} -> {source}")
+            else:
+                print(f"Conflict: {target} already exists (not a symlink)")
         else:
             target.symlink_to(source)
             print(f"Created: {target} -> {source}")
@@ -108,6 +118,7 @@ def process_symlinks(
     folders: List[str],
     recursive: bool = False,
     delete: bool = False,
+    force: bool = False,
 ) -> None:
     """Process symlinks for the given directories.
 
@@ -120,6 +131,7 @@ def process_symlinks(
         folders: List of folder names to process (e.g., 'bin', 'lib', 'share').
         recursive: If True, search recursively for files.
         delete: If True, delete symlinks instead of creating them.
+        force: If True, overwrite conflicting files or symlinks.
     """
     if recursive:
         files_map = find_files_recursive(input_dir, folders)
@@ -129,7 +141,7 @@ def process_symlinks(
     for folder, files in files_map.items():
         for source, name in files:
             target = output_dir / folder / name
-            create_symlink(source, target, delete)
+            create_symlink(source, target, delete, force)
 
 
 def main() -> None:
@@ -150,6 +162,9 @@ Examples:
 
   %(prog)s ~/myapp -D
     Delete symlinks previously created from ~/myapp
+
+  %(prog)s ~/myapp -f
+    Overwrite conflicting files or symlinks
         """,
     )
 
@@ -183,7 +198,14 @@ Examples:
 
     parser.add_argument(
         "-f",
-        "--folders",
+        "--force",
+        action="store_true",
+        help="Overwrite conflicting files or symlinks",
+    )
+
+    parser.add_argument(
+        "-i",
+        "--include",
         type=str,
         nargs="+",
         default=DEFAULT_FOLDERS,
@@ -206,7 +228,7 @@ Examples:
         sys.exit(1)
 
     # Process symlinks
-    process_symlinks(input_dir, output_dir, args.folders, args.recursive, args.delete)
+    process_symlinks(input_dir, output_dir, args.include, args.recursive, args.delete, args.force)
 
 
 if __name__ == "__main__":
