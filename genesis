@@ -382,16 +382,19 @@ class Genesis:
             logger.info("No apps selected for installation")
             return
 
-        # Warn about dependencies that are neither selected nor already on PATH.
+        # Warn about dependencies that are neither selected nor already installed.
+        all_by_name = {c.name: c for c in applications}
         selected_names = {c.name for c in selected_applications}
         for app in selected_applications:
             for dep in app.dependencies:
-                if dep not in selected_names and not shutil.which(dep):
-                    logger.warning(
-                        "%s depends on %s which is not selected and not found in PATH",
-                        app.name,
-                        dep,
-                    )
+                if dep not in selected_names:
+                    known = all_by_name.get(dep)
+                    if known is None or not known.is_installed:
+                        logger.warning(
+                            "%s depends on %s which is not selected and not found in PATH",
+                            app.name,
+                            dep,
+                        )
 
         selected_applications = resolve_order(selected_applications)
         logger.info("Installing %d application(s)", len(selected_applications))

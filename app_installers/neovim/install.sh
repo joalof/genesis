@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-git clone https://github.com/neovim/neovim.git
-cd neovim/
+if [ -d neovim ]; then
+    cd neovim/
+    git checkout master
+    git pull
+    git fetch --tags
+else
+    git clone https://github.com/neovim/neovim.git
+    cd neovim/
+fi
 git checkout nightly
 INSTALL_DIR="$HOME/apps/neovim"
 STAGING_DIR="${INSTALL_DIR}.new"
@@ -12,4 +19,4 @@ make CMAKE_BUILD_TYPE=Release CMAKE_INSTALL_PREFIX="${STAGING_DIR}" install
 # swap in only on success — preserves the old install if the build fails
 rm -rf "$INSTALL_DIR"
 mv "$STAGING_DIR" "$INSTALL_DIR"
-symfarm "${INSTALL_DIR}"
+symfarm -f "${INSTALL_DIR}"
