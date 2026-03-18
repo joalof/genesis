@@ -1,0 +1,6 @@
+{
+    "name": "chezmoi",
+    "dependencies": [],
+    "artifacts": ["chezmoi"],
+    "platforms": ["linux", "wsl"]
+}
