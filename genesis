@@ -214,7 +214,6 @@ class Genesis:
 
         self.app_dir = Path(config['app_dir']).expanduser()
         self.local_fhs = Path(config['local_fhs']).expanduser()
-        self.dotfiles_repo = config['dotfiles_repo']
 
         #: Directories to create under $HOME (relative paths).
         self.dir_structure: tuple[Path, ...] = (
@@ -315,13 +314,14 @@ class Genesis:
         logger.info("Development tools installed")
 
     def setup_dotfiles(self) -> None:
-        """Clone or update the dotfiles repo.
-        """
+        """Install chezmoi and apply dotfiles via the chezmoi app installer."""
         logger.info("Setting up dotfiles...")
-        if not shutil.which('chezmoi'):
-            subprocess.run('curl -fsLS get.chezmoi.io | sh', cwd=self.local_fhs, shell=True, check=True)
-        subprocess.run(['chezmoi', 'init',  self.dotfiles_repo], cwd=SCRIPT_DIR, check=True)
-        subprocess.run(['chezmoi', 'apply'], cwd=SCRIPT_DIR, check=True)
+        chezmoi_script = SCRIPT_DIR / "app_installers" / "chezmoi" / "install.sh"
+        if not chezmoi_script.is_file():
+            logger.error("chezmoi installer not found: %s", chezmoi_script)
+            sys.exit(1)
+        chezmoi_script.chmod(0o755)
+        subprocess.run(["bash", str(chezmoi_script)], cwd=self.local_fhs / "src", check=True)
 
     def _select_applications(self, applications: list[Application]) -> list[Application]:
         """Display a numbered menu and return the apps the user chose.
