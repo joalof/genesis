@@ -16,6 +16,7 @@
     "gnupg",
     "lsb-release",
     "gettext",
+    "rename",
     "unzip",
     "curl",
     "wget",
