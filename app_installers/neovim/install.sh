@@ -4,7 +4,7 @@ if [ -d neovim ]; then
     cd neovim/
     git checkout master
     git pull
-    git fetch --tags
+    git fetch --force --tags
 else
     git clone https://github.com/neovim/neovim.git
     cd neovim/
