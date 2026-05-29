@@ -23,7 +23,6 @@
     "strace",
     "jq",
     "ripgrep",
-    "fd-find",
     "htop",
     "tree",
     "keychain",
