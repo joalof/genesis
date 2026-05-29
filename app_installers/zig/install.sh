@@ -4,10 +4,16 @@ set -euo pipefail
 ARCH="x86_64-linux"
 INSTALL_DIR="$HOME/apps/zig"
 
-# Fetch latest stable version and tarball URL
+PINNED_VERSION="0.15.2"
+
 JSON=$(curl -fsSL https://ziglang.org/download/index.json)
 
-VERSION=$(echo "$JSON" | jq -r '.latest')
+if [[ -n "$PINNED_VERSION" ]]; then
+  VERSION="$PINNED_VERSION"
+else
+  VERSION=$(echo "$JSON" | jq -r '.latest')
+fi
+
 TARBALL_URL=$(echo "$JSON" | jq -r ".\"$VERSION\".\"$ARCH\".tarball")
 
 echo "Latest Zig version: $VERSION"

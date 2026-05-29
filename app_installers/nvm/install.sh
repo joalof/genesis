@@ -10,5 +10,4 @@ TOPDIR=$(tar tzf nvm.tar.gz | head -1 | cut -d/ -f1)
 tar xf $ARCHIVE
 mkdir -p ~/apps/nvm 2>/dev/null
 mv "$TOPDIR/nvm.sh" "$TOPDIR/bash_completion" ~/apps/nvm
-nvm install --lts
 rm -r $TOPDIR $ARCHIVE

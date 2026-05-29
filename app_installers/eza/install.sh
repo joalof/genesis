@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-cargo install eza
+cargo install --version '0.23.4' eza
