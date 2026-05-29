@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+cargo install zoxide --version '0.9.9' --locked

@@ -1,0 +1,6 @@
+{
+    "name": "fd-find",
+    "dependencies": ["rust"],
+    "artifacts": ["fd"],
+    "platforms": ["linux", "wsl"]
+}
