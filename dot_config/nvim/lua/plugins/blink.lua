@@ -99,12 +99,12 @@ return {
         local blink = require("blink.cmp")
         blink.setup(opts)
 
-        vim.api.nvim_create_autocmd("InsertLeave", {
-            group = vim.api.nvim_create_augroup("joakim.blink_close", { clear = true }),
-            desc = "Close blink completion menu",
-            callback = function()
-                require("blink.cmp").cancel()
-            end,
-        })
+        -- vim.api.nvim_create_autocmd("InsertLeave", {
+        --     group = vim.api.nvim_create_augroup("joakim.blink_close", { clear = true }),
+        --     desc = "Close blink completion menu",
+        --     callback = function()
+        --         require("blink.cmp").cancel()
+        --     end,
+        -- })
     end,
 }

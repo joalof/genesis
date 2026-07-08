@@ -6,8 +6,14 @@ return {
         { "gb", mode = { "n", "x" } },
         { "gy", mode = { "v" } },
     },
+    dependencies = {
+        "JoosepAlviste/nvim-ts-context-commentstring",
+    },
     config = function()
-        require("Comment").setup()
+        require("ts_context_commentstring").setup({})
+        require("Comment").setup({
+            pre_hook = require("ts_context_commentstring.integrations.comment_nvim").create_pre_hook()
+        })
         -- require("Comment").setup({ ignore = '^$',  })
         -- Define a mapping that pastes the current selection
         -- below and then comments the original text

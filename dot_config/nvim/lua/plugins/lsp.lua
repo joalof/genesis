@@ -94,6 +94,7 @@ vim.g.lsp_servers = {
             },
         },
     },
+    ruff = {},
 }
 
 vim.g.other_mason_servers = { "stylua" }
