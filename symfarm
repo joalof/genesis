@@ -5,18 +5,37 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 
 DEFAULT_FOLDERS = ["bin", "lib", "share", "man", "etc", "include", "lib64"]
 
 
-def create_symlink(source: Path, target: Path, delete: bool = False, force: bool = False) -> None:
+def prune_empty_dirs(start: Path, stop: Path) -> None:
+    """Remove empty directories walking up from start towards (but excluding) stop.
+
+    Stops at the first non-empty directory, or once stop is reached.
+
+    Args:
+        start: The directory to start removing from.
+        stop: The ancestor directory to stop at (never removed).
+    """
+    current = start
+    while current != stop and current.is_relative_to(stop):
+        try:
+            current.rmdir()
+            print(f"Removed empty directory: {current}")
+        except OSError:
+            break
+        current = current.parent
+
+
+def create_symlink(source: Path, target: Path, output_dir: Path, delete: bool = False, force: bool = False) -> None:
     """Create or delete a symlink.
 
     Args:
         source: The source file to link to.
         target: The symlink path to create.
+        output_dir: The root output directory; pruning of emptied directories stops here.
         delete: If True, delete the symlink instead of creating it.
         force: If True, overwrite conflicting files or symlinks.
     """
@@ -27,12 +46,13 @@ def create_symlink(source: Path, target: Path, delete: bool = False, force: bool
             if resolved_target == resolved_source:
                 target.unlink()
                 print(f"Deleted: {target}")
+                prune_empty_dirs(target.parent, output_dir)
             else:
                 print(f"Skipped (points elsewhere): {target}")
         elif target.exists():
             print(f"Skipped (not a symlink): {target}")
     else:
-        # Create parent directory if it doesn't exist
+        # Create parent directories if they don't exist
         target.parent.mkdir(parents=True, exist_ok=True)
 
         if target.is_symlink():
@@ -58,56 +78,74 @@ def create_symlink(source: Path, target: Path, delete: bool = False, force: bool
             print(f"Created: {target} -> {source}")
 
 
-def find_files_recursive(input_dir: Path, folders: List[str]) -> Dict[str, List[Tuple[Path, str]]]:
+def collect_files_under(folder_path: Path) -> list[tuple[Path, Path]]:
+    """Collect all files under a folder, preserving their relative path.
+
+    Args:
+        folder_path: The directory to walk.
+
+    Returns:
+        List of (source_path, relative_path) tuples, where relative_path
+        is the path of source_path relative to folder_path.
+    """
+    results: list[tuple[Path, Path]] = []
+    for root, _dirs, files in os.walk(folder_path):
+        root_path = Path(root)
+        for file in files:
+            source = root_path / file
+            results.append((source, source.relative_to(folder_path)))
+    return results
+
+
+def find_files_recursive(input_dir: Path, folders: list[str]) -> dict[str, list[tuple[Path, Path]]]:
     """Find files recursively in specified folders.
 
     Searches the input directory tree for any directory matching the folder names,
-    and collects all files within them. The resulting symlinks will be flat, so
-    foo/bar/bin/x will create a symlink bin/x.
+    and collects all files under them, preserving their relative path. So
+    foo/bar/share/icons/hicolor/apps/x will create a symlink share/icons/hicolor/apps/x.
 
     Args:
         input_dir: The input directory to search.
         folders: List of folder names to search for.
 
     Returns:
-        Dictionary mapping folder names to lists of (source_path, filename) tuples.
+        Dictionary mapping folder names to lists of (source_path, relative_path) tuples.
     """
-    results: Dict[str, List[Tuple[Path, str]]] = {folder: [] for folder in folders}
+    results: dict[str, list[tuple[Path, Path]]] = {folder: [] for folder in folders}
 
     for folder in folders:
         # Search for all occurrences of this folder name in the tree
-        for root, dirs, files in os.walk(input_dir):
+        for root, dirs, _files in os.walk(input_dir):
             root_path = Path(root)
 
             # Check if current directory name matches our target folder
             if root_path.name == folder:
-                for file in files:
-                    source = root_path / file
-                    results[folder].append((source, file))
+                results[folder].extend(collect_files_under(root_path))
+                # Already captured everything below; don't look for nested matches inside it
+                dirs[:] = []
 
     return results
 
 
-def find_files_non_recursive(input_dir: Path, folders: List[str]) -> Dict[str, List[Tuple[Path, str]]]:
-    """Find files in direct subfolders only.
+def find_files_non_recursive(input_dir: Path, folders: list[str]) -> dict[str, list[tuple[Path, Path]]]:
+    """Find files under direct subfolders of the input directory only.
 
-    Only processes direct children of the input directory, not nested subdirectories.
+    Only looks for bin/, lib/, share/, etc. as direct children of the input
+    directory, but preserves the full relative path of files within them.
 
     Args:
         input_dir: The input directory to search.
         folders: List of folder names to search for.
 
     Returns:
-        Dictionary mapping folder names to lists of (source_path, filename) tuples.
+        Dictionary mapping folder names to lists of (source_path, relative_path) tuples.
     """
-    results: Dict[str, List[Tuple[Path, str]]] = {folder: [] for folder in folders}
+    results: dict[str, list[tuple[Path, Path]]] = {folder: [] for folder in folders}
 
     for folder in folders:
         folder_path = input_dir / folder
         if folder_path.is_dir():
-            for item in folder_path.iterdir():
-                if item.is_file():
-                    results[folder].append((item, item.name))
+            results[folder].extend(collect_files_under(folder_path))
 
     return results
 
@@ -115,7 +153,7 @@ def find_files_non_recursive(input_dir: Path, folders: List[str]) -> Dict[str, L
 def process_symlinks(
     input_dir: Path,
     output_dir: Path,
-    folders: List[str],
+    folders: list[str],
     recursive: bool = False,
     delete: bool = False,
     force: bool = False,
@@ -139,9 +177,9 @@ def process_symlinks(
         files_map = find_files_non_recursive(input_dir, folders)
 
     for folder, files in files_map.items():
-        for source, name in files:
-            target = output_dir / folder / name
-            create_symlink(source, target, delete, force)
+        for source, rel_path in files:
+            target = output_dir / folder / rel_path
+            create_symlink(source, target, output_dir, delete, force)
 
 
 def main() -> None:
@@ -158,7 +196,7 @@ Examples:
     Create symlinks in ~/custom instead of ~/.local
 
   %(prog)s ~/myapp -r
-    Recursively search for bin/, lib/, etc. folders and create flat symlinks
+    Recursively search for bin/, lib/, etc. folders anywhere in the tree
 
   %(prog)s ~/myapp -D
     Delete symlinks previously created from ~/myapp
@@ -193,7 +231,7 @@ Examples:
         "-r",
         "--recursive",
         action="store_true",
-        help="Search recursively in input dir, creating flat symlinks",
+        help="Search recursively in input dir for bin/, lib/, etc. folders anywhere in the tree",
     )
 
     parser.add_argument(
