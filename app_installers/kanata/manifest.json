@@ -1,0 +1,6 @@
+{
+    "name": "kanata",
+    "dependencies": [],
+    "artifacts": ["kanata"],
+    "platforms": ["linux"]
+}
