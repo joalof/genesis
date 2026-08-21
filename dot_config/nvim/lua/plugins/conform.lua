@@ -5,7 +5,13 @@ return {
         require("conform").setup({
             formatters_by_ft = {
                 lua = { "stylua" },
-                python = { "isort", "black" },
+                python = function(bufnr)
+                  if require("conform").get_formatter_info("ruff_format", bufnr).available then
+                    return { "ruff_format" }
+                  else
+                    return { "isort", "black" }
+                  end
+                end,
                 c = { name = "clangd", timeout_ms = 500, lsp_format = "prefer" },
                 go = { name = "gopls", timeout_ms = 500, lsp_format = "prefer" },
                 javascript = { "prettier", name = "dprint", timeout_ms = 500, lsp_format = "fallback" },
@@ -21,7 +27,10 @@ return {
                 typescriptreact = { "prettier", name = "dprint", timeout_ms = 500, lsp_format = "fallback" },
                 yaml = { "prettier" },
                 -- If there is no formatter
-                ['_'] = { 'trim_whitespace', 'trim_newlines' },
+                ["_"] = { "trim_whitespace", "trim_newlines" },
+            },
+            default_format_opts = {
+                lsp_format = "fallback",
             },
         })
         vim.keymap.set("n", "<leader>af", function()

@@ -57,6 +57,7 @@ return {
         })
 
         vim.keymap.set("n", "<leader>rr", function()
+            vim.cmd('update')
             local term = ergoterm.get_by_name(runner_name)
             if term ~= nil then
                 term:cleanup()
@@ -76,6 +77,7 @@ return {
         end)
 
         vim.keymap.set("n", "<leader>rx", function()
+            vim.cmd('update')
             local term = ergoterm.get_by_name(runner_name)
             if term ~= nil then
                 term:cleanup()
@@ -84,6 +86,7 @@ return {
 
         -- run current script with ipython
         vim.keymap.set("n", "<leader>ri", function()
+            vim.cmd('update')
             local filename = vim.api.nvim_buf_get_name(0)
             local cmd = string.format("ipython --no-banner --no-confirm-exit -i %s", filename)
             vim.print(cmd)

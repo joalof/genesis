@@ -94,7 +94,16 @@ vim.g.lsp_servers = {
             },
         },
     },
-    ruff = {},
+    ruff = {
+        init_options = {
+            settings = {
+                lineLength = 88,
+                lint = {
+                    ignore = { "I001" }
+                }
+            },
+        },
+    },
 }
 
 vim.g.other_mason_servers = { "stylua" }
@@ -360,7 +369,7 @@ return {
             }
             vim.diagnostic.config(default_diagnostic_config)
 
-            vim.api.nvim_create_autocmd({ "CursorHold"  }, {
+            vim.api.nvim_create_autocmd({ "CursorHold" }, {
                 group = vim.api.nvim_create_augroup("joakim.lsp.diagnostic", { clear = true }),
                 callback = function()
                     vim.diagnostic.open_float(nil, { focusable = false, scope = "cursor" })

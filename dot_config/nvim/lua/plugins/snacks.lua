@@ -57,13 +57,13 @@ return {
             end,
             desc = "Select scratch buffer",
         },
-        -- {
-        --     "<leader>fb",
-        --     function()
-        --         Snacks.picker.buffers()
-        --     end,
-        --     desc = "Buffers",
-        -- },
+        {
+            "<leader>fb",
+            function()
+                Snacks.picker.buffers()
+            end,
+            desc = "Buffers",
+        },
         {
             "<leader>fn",
             function()
@@ -85,8 +85,6 @@ return {
             end,
             desc = "Projects",
         },
-        -- git
-        -- { "<leader>fg", function() Snacks.picker.git_branches() end, desc = "Git Branches" },
         {
             "<leader>f/",
             function()
@@ -143,13 +141,6 @@ return {
             end,
             desc = "Undo History",
         },
-        -- {
-        --     "<leader>af",
-        --     function()
-        --         Snacks.rename.rename_file()
-        --     end,
-        --     desc = "Rename File",
-        -- },
         {
             "<leader>fl",
             function()
@@ -181,29 +172,95 @@ return {
             "<leader>fs",
             function()
                 Snacks.picker.lsp_symbols({
-                    tree = true, workspace = false
+                    tree = true,
+                    workspace = false,
                 })
             end,
             desc = "LSP symbols",
-            
         },
         {
             "<leader>fg",
             function()
-                Snacks.picker.grep({
-                })
+                Snacks.picker.grep({})
             end,
             desc = "Grep",
-            
         },
         {
             "<leader>fa",
             function()
-                Snacks.picker.autocmds({
-                })
+                Snacks.picker.autocmds({})
             end,
             desc = "autocmds",
-            
         },
     },
+    config = function(_, opts)
+        local Snacks = require("snacks")
+
+        Snacks.setup(opts)
+
+        -- a reusable insert-at-cursor confirm
+        local function insert_at_cursor(picker)
+            picker:close()
+            local lines = vim.tbl_map(function(i)
+                return i.text
+            end, picker:selected({ fallback = true }))
+            if #lines == 0 then
+                return
+            end
+            local insert_mode = picker.input.mode == "i"
+            vim.schedule(function()
+                vim.api.nvim_put(lines, "c", not insert_mode, true) -- "c" charwise; use "l" for whole lines
+                if insert_mode then
+                    vim.cmd.startinsert({ bang = true })
+                end
+            end)
+        end
+
+        -- generic template: picker over the output of any command
+        ---@param opts {cmd:string, args?:string[], cwd?:string, title?:string}
+        local function cmd_picker(opts)
+            return Snacks.picker.pick(vim.tbl_extend("keep", opts, {
+                finder = "proc",
+                format = "text",
+                preview = "none",
+                title = opts.title or opts.cmd,
+                confirm = insert_at_cursor,
+            }))
+        end
+
+        vim.keymap.set(
+            { "n" },
+            ",vd",
+            function()
+                cmd_picker({
+                    cmd = "jq",
+                    args = {
+                        "-r",
+                        ".[] | .function_name",
+                        vim.fn.expand("~/projects/vion-orchestra/image-database.json"),
+                    },
+                    title = "vion-orchestra function",
+                })
+            end,
+            { desc = "Pick vion-orchestra function" }
+        )
+
+        vim.keymap.set(
+            { "n" },
+            ",va",
+            function()
+                cmd_picker({
+                    cmd = "jq",
+                    args = {
+                        "-r",
+                        ".[] | .output_uri",
+                        vim.fn.expand("~/projects/vion-orchestra/image-database.json"),
+                    },
+                    title = "vion-orchestra artifact",
+                })
+            end,
+            { desc = "Pick vion-orchestra artifact uri" }
+        )
+        
+    end,
 }
