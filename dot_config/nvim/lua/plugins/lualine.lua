@@ -67,7 +67,7 @@ return {
                     { "filename", path = 4 },
                 },
                 lualine_x = {
-                    { require("recorder").recordingStatus, separator = " " },
+                    -- { require("recorder").recordingStatus, separator = " " },
                     { "diagnostics", sources = { "nvim_diagnostic" } },
                     { "lsp_status", symbols = { spinner = "", done = "" } },
                 },

@@ -229,17 +229,10 @@ return {
                         vim.keymap.set("n", keys, func, { buffer = event.buf, desc = "LSP: " .. desc })
                     end
 
-                    local Snacks = require("snacks")
+                    map("gd", "<cmd>FzfLua lsp_definitions<CR>", "[g]oto [d]efinition")
+                    map("gr", "<cmd>FzfLua lsp_references<CR>", "[g]oto [r]eferences")
+                    map("gI", "<cmd>FzfLua lsp_implementations<CR>", "[g]oto [I]mplementation")
 
-                    map("gd", function()
-                        Snacks.picker.lsp_definitions()
-                    end, "[g]oto [d]efinition")
-                    map("gr", function()
-                        Snacks.picker.lsp_references()
-                    end, "[g]oto [r]eferences")
-                    map("gI", function()
-                        Snacks.picker.lsp_implementations()
-                    end, "[g]oto [I]mplementation")
                     map("<leader>dl", vim.diagnostic.setloclist, "Open diagnostic [l]sp [l]oclist list")
                     map("<leader>dq", vim.diagnostic.setqflist, "Open diagnostic [l]sp [q]uickfix list")
                     map("<leader>ar", vim.lsp.buf.rename, "[a]ction [r]ename")
@@ -377,47 +370,47 @@ return {
             })
 
             -- Set Toggles
-            Snacks.toggle
-                .new({
-                    id = "Virtual diagnostics (Lines)",
-                    name = "Virtual diagnostics (Lines)",
-                    get = function()
-                        if vim.diagnostic.config().virtual_lines then
-                            return true
-                        else
-                            return false
-                        end
-                    end,
-                    set = function(state)
-                        if state == true then
-                            vim.diagnostic.config({ virtual_lines = virtual_lines.on })
-                        else
-                            vim.diagnostic.config({ virtual_lines = virtual_lines.off })
-                        end
-                    end,
-                })
-                :map("<leader>dv")
-
-            Snacks.toggle
-                .new({
-                    id = "Virtual diagnostics (Text)",
-                    name = "Virtual diagnostics (Text)",
-                    get = function()
-                        if vim.diagnostic.config().virtual_text then
-                            return true
-                        else
-                            return false
-                        end
-                    end,
-                    set = function(state)
-                        if state == true then
-                            vim.diagnostic.config({ virtual_text = virtual_text.on })
-                        else
-                            vim.diagnostic.config({ virtual_text = virtual_text.off })
-                        end
-                    end,
-                })
-                :map("<leader>dV")
+            -- Snacks.toggle
+            --     .new({
+            --         id = "Virtual diagnostics (Lines)",
+            --         name = "Virtual diagnostics (Lines)",
+            --         get = function()
+            --             if vim.diagnostic.config().virtual_lines then
+            --                 return true
+            --             else
+            --                 return false
+            --             end
+            --         end,
+            --         set = function(state)
+            --             if state == true then
+            --                 vim.diagnostic.config({ virtual_lines = virtual_lines.on })
+            --             else
+            --                 vim.diagnostic.config({ virtual_lines = virtual_lines.off })
+            --             end
+            --         end,
+            --     })
+            --     :map("<leader>dv")
+            --
+            -- Snacks.toggle
+            --     .new({
+            --         id = "Virtual diagnostics (Text)",
+            --         name = "Virtual diagnostics (Text)",
+            --         get = function()
+            --             if vim.diagnostic.config().virtual_text then
+            --                 return true
+            --             else
+            --                 return false
+            --             end
+            --         end,
+            --         set = function(state)
+            --             if state == true then
+            --                 vim.diagnostic.config({ virtual_text = virtual_text.on })
+            --             else
+            --                 vim.diagnostic.config({ virtual_text = virtual_text.off })
+            --             end
+            --         end,
+            --     })
+            --     :map("<leader>dV")
         end,
     },
 }
