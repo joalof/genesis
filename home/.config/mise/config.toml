@@ -1,6 +1,6 @@
 [settings]
 # Only resolve fuzzy versions older than this (bypassed by pins/lock)
-minimum_release_age = "3d"
+minimum_release_age = "4d"
 # Respect rust-toolchain.toml / .nvmrc in projects
 idiomatic_version_file_enable_tools = ["rust", "node"]
 
@@ -14,7 +14,7 @@ go = "latest"
 rust = { version = "stable", components = ["rust-analyzer", "rust-src", "clippy", "rustfmt"] }
 uv = "latest"  # aqua: needed to bootstrap the pypi: backend; uv provisions Python
 zig = "0.15.2"
-"npm:pnpm" = "latest"
+"npm:typescript" = "latest"
 
 # --- Editor
 neovim = "path:/home/joakim/apps/neovim"   # self-compiled, see genesis/mise-tasks/build-neovim
@@ -22,9 +22,7 @@ neovim = "path:/home/joakim/apps/neovim"   # self-compiled, see genesis/mise-tas
 
 # --- Language servers
 "npm:typescript-language-server" = "latest"
-"npm:typescript" = "latest"  # required by typescript-language-server
-"go:golang.org/x/tools/gopls" = "latest"
-"pypi:ty" = "latest" # Python type checker + LSP
+"pypi:ty" = "latest"
 
 # --- Linters & formatters
 "pypi:ruff" = "latest"
@@ -50,12 +48,10 @@ gcloud = "latest"
 "cargo:zoxide" = { version = "latest", locked = true }
 "cargo:tealdeer" = { version = "latest", locked = true }  # tldr
 "go:github.com/junegunn/fzf" = "latest"
-# aqua: yazi's crates refuse plain `cargo install`, and yazi-build installs outside mise
-yazi = { version = "latest", postinstall = "ya pkg install" }  # plugins from ~/.config/yazi/package.toml
+yazi = { version = "latest", postinstall = "ya pkg install" }
 "cargo:starship" = { version = "latest", locked = true }
 "go:github.com/jesseduffield/lazydocker" = "latest"
 
 # --- Keyboard remapping
-# 1.12 isn't on crates.io, so build the tag from git
-# uinput access is set up by genesis' bootstrap (scripts/kanata-setup.sh)
+# note: need bootstrap scripts/kanata-setup.sh to work
 "cargo:https://github.com/jtroo/kanata" = { version = "tag:v1.12.0", crate = "kanata", locked = true }
