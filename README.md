@@ -19,11 +19,11 @@ Pass `-E x11` instead on X11. On an existing checkout run `mise bootstrap -C ~/c
 ├── mise.wayland.toml    # display-server specific packages, selected with -E
 ├── mise.x11.toml
 ├── home/                # dotfiles, mirrors ~
-├── scripts/             # post-install scripts (docker, kanata)
+├── scripts/             # post-install scripts (docker, kanata), run as bootstrap hooks
 └── mise-tasks/          # source builds (neovim, ghostty)
 ```
 
-`mise bootstrap` runs, in order: apt packages, the docker script, directories, dotfiles, tools, and finally the `bootstrap` task, which installs claude and builds any missing source-built apps. Every step can run again, so bootstrap is safe to re-run; hooks, `postinstall` scripts and the `bootstrap` task must stay idempotent to keep it that way.
+`mise bootstrap` runs, in order: apt packages, the docker script, directories, dotfiles, tools, the kanata (uinput) script, and finally the `bootstrap` task, which installs claude and builds any missing source-built apps. Every step can run again, so bootstrap is safe to re-run; hooks, `postinstall` scripts and the `bootstrap` task must stay idempotent to keep it that way.
 
 ## Dotfiles
 Every file under `home/` is symlinked to the same path under `~`, so editing a dotfile edits the repo directly. To track a new file, move it into `home/` and run `mise bootstrap -C ~/code/genesis --only dotfiles`.

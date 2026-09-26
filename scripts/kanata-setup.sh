@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Give the current user access to /dev/uinput so kanata can run without root.
-# Runs as the postinstall hook of the kanata tool in mise, so it must be safe to repeat.
+# Runs as a mise bootstrap hook on every bootstrap, so every step must be safe to repeat.
 # https://github.com/jtroo/kanata/blob/main/docs/setup-linux.md
 set -euo pipefail
 

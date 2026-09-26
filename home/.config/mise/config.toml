@@ -57,4 +57,5 @@ yazi = { version = "latest", postinstall = "ya pkg install" }  # plugins from ~/
 
 # --- Keyboard remapping
 # 1.12 isn't on crates.io, so build the tag from git
-"cargo:https://github.com/jtroo/kanata" = { version = "tag:v1.12.0", crate = "kanata", locked = true, postinstall = "bash ~/code/genesis/scripts/kanata-setup.sh" }
+# uinput access is set up by genesis' bootstrap (scripts/kanata-setup.sh)
+"cargo:https://github.com/jtroo/kanata" = { version = "tag:v1.12.0", crate = "kanata", locked = true }

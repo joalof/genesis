@@ -73,6 +73,7 @@ mode = "0775"
 # --- Hooks (run from this directory, and again on every bootstrap)
 [bootstrap.hooks]
 post_packages = "bash scripts/docker.sh"
+post_tools = "bash scripts/kanata-setup.sh"
 
 # --- Everything mise can't install declaratively; runs last
 [tasks.bootstrap]
