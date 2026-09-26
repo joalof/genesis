@@ -79,6 +79,18 @@ return {
                     -- scored files outside the project are filtered out, and
                     -- unscored project files are appended via `fd`
                     cwd_only = true,
+                    display_score = false,
+                    -- default is { "cwd", "actions" }; drop "actions" to lose the
+                    -- "<ctrl-x> to delete a frecency score" reminder
+                    _headers = { "cwd" },
+                    fzf_opts = {
+                        -- frecency defaults this to true, which disables fzf's
+                        -- ranking entirely: a scattered match scores the same as
+                        -- a literal one. Rank by match quality instead, and let
+                        -- the frecency-sorted input order break ties.
+                        ["--no-sort"] = false,
+                        ["--tiebreak"] = "index",
+                    },
                 })
             end,
             desc = "Find project files",

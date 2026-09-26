@@ -27,6 +27,4 @@ tui_theme = "tokyo-night"
 # Style for displaying asset tables. Options: "fancy" (rich table), "plain" (tabulate, no truncation), "block" (key-value block per asset) or "auto" to automatically choose based on context.
 asset_table_style = "auto"
 
-asset_download_name = "vionlabs_id"
-
 [catalog_api_keys]

@@ -31,8 +31,8 @@ keybind = ctrl+s>q=close_surface
 keybind = ctrl+s>v=new_split:right
 keybind = ctrl+s>/=new_split:right
 keybind = ctrl+s>s=new_split:down
-keybind = performable:ctrl+s>k=goto_split:top
-keybind = performable:ctrl+s>j=goto_split:bottom
+keybind = performable:ctrl+s>k=goto_split:up
+keybind = performable:ctrl+s>j=goto_split:down
 keybind = performable:ctrl+s>h=goto_split:left
 keybind = performable:ctrl+s>l=goto_split:right
 
