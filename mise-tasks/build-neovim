@@ -22,6 +22,6 @@ mkdir -p "$STAGING_DIR"
 make CMAKE_BUILD_TYPE=Release CMAKE_INSTALL_PREFIX="${STAGING_DIR}"
 make CMAKE_BUILD_TYPE=Release CMAKE_INSTALL_PREFIX="${STAGING_DIR}" install
 # swap in only on success — preserves the old install if the build fails
-# (no symfarm: the path: entry in the mise config puts bin/ on PATH)
 rm -rf "$INSTALL_DIR"
 mv "$STAGING_DIR" "$INSTALL_DIR"
+symfarm -f "${INSTALL_DIR}"
