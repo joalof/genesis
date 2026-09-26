@@ -3,6 +3,7 @@
 minimum_release_age = "4d"
 # Respect rust-toolchain.toml / .nvmrc in projects
 idiomatic_version_file_enable_tools = ["rust", "node"]
+activate_shims = false
 
 [tools]
 # Prefer native package managers  over aqua where available.
