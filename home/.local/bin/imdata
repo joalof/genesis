@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""imdata - operate on a folder of images plus an accompanying metadata CSV.
+
+The CSV has a `filename` column (configurable) plus arbitrary attribute columns,
+e.g. exported from a Roboflow dataset. Every subcommand that selects rows shares
+the same `--where` filter DSL:
+
+    --where "split=train"        equals (string compare)
+    --where "label!=cat"         not equals
+    --where "score>=0.8"         numeric compare: >  <  >=  <=
+    --where "caption~sunset"     regex / substring match
+    --where "label:in:cat,dog"   membership
+    --where "label:isnull"       missing value
+    --where "label:isnotnull"    present value
+
+Multiple conditions can be joined with '&' in a single --where, or given as
+repeated --where flags; either way they are AND-combined, e.g.:
+
+    --where "split=train&score>=0.8"
+"""
+from __future__ import annotations
+
+import argparse
+import shutil
+from functools import reduce
+from pathlib import Path
+
+import polars as pl
+
+IMAGE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".webp", ".heic", ".heif",
+}
+TRASH_DIRNAME = ".trash"
+
+
+# --------------------------------------------------------------------------- #
+# filesystem / metadata helpers
+# --------------------------------------------------------------------------- #
+def find_images(directory: Path) -> list[str]:
+    return sorted(
+        p.name for p in directory.iterdir()
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+
+def load_metadata(directory: Path, csv: str, filename_col: str) -> pl.DataFrame:
+    path = directory / csv
+    if path.exists():
+        df = pl.read_csv(path)
+        if filename_col not in df.columns:
+            raise SystemExit(f"error: column {filename_col!r} not found in {path}")
+    else:
+        df = pl.DataFrame({filename_col: pl.Series([], dtype=pl.Utf8)})
+    # keep filename comparable for is_in / joins
+    return df.with_columns(pl.col(filename_col).cast(pl.Utf8))
+
+
+def save_metadata(df: pl.DataFrame, directory: Path, csv: str, filename_col: str) -> None:
+    others = [c for c in df.columns if c != filename_col]
+    df.select([filename_col, *others]).write_csv(directory / csv)
+
+
+def unique_path(dst: Path) -> Path:
+    if not dst.exists():
+        return dst
+    i = 1
+    while True:
+        cand = dst.with_name(f"{dst.stem}_{i}{dst.suffix}")
+        if not cand.exists():
+            return cand
+        i += 1
+
+
+def confirm(prompt: str, assume_yes: bool) -> bool:
+    if assume_yes:
+        return True
+    return input(f"{prompt} [y/N] ").strip().lower() in ("y", "yes")
+
+
+# --------------------------------------------------------------------------- #
+# --where filter DSL
+# --------------------------------------------------------------------------- #
+def _condition(cond: str, columns: list[str]) -> pl.Expr:
+    def col(name: str) -> str:
+        name = name.strip()
+        if name not in columns:
+            raise SystemExit(f"error: unknown column {name!r} in --where {cond!r}")
+        return name
+
+    if cond.endswith(":isnull"):
+        return pl.col(col(cond[: -len(":isnull")])).is_null()
+    if cond.endswith(":isnotnull"):
+        return pl.col(col(cond[: -len(":isnotnull")])).is_not_null()
+    if ":in:" in cond:
+        name, rest = cond.split(":in:", 1)
+        values = [v.strip() for v in rest.split(",")]
+        return pl.col(col(name)).cast(pl.Utf8).is_in(values)
+
+    for op in ("!=", ">=", "<=", "~", ">", "<", "="):
+        if op in cond:
+            raw_name, value = cond.split(op, 1)
+            name, value = col(raw_name), value.strip()
+            if op == "=":
+                return pl.col(name).cast(pl.Utf8) == value
+            if op == "!=":
+                return pl.col(name).cast(pl.Utf8) != value
+            if op == "~":
+                return pl.col(name).cast(pl.Utf8).str.contains(value)
+            num = pl.col(name).cast(pl.Float64, strict=False)
+            fval = float(value)
+            return {">": num > fval, "<": num < fval, ">=": num >= fval, "<=": num <= fval}[op]
+
+    raise SystemExit(f"error: could not parse --where {cond!r}")
+
+
+def _split_wheres(wheres: list[str]) -> list[str]:
+    return [part.strip() for cond in wheres for part in cond.split("&") if part.strip()]
+
+
+def select_rows(df: pl.DataFrame, wheres: list[str], allow_all: bool) -> pl.DataFrame:
+    if not wheres:
+        if not allow_all:
+            raise SystemExit("error: no --where given (pass --all to operate on every row)")
+        return df
+    expr = reduce(lambda a, b: a & b, (_condition(w, df.columns) for w in _split_wheres(wheres)))
+    return df.filter(expr)
+
+
+# --------------------------------------------------------------------------- #
+# file transfer shared by move / sample / split --move
+# --------------------------------------------------------------------------- #
+def transfer(
+    rows: pl.DataFrame,
+    src_dir: Path,
+    dest_dir: Path,
+    filename_col: str,
+    copy: bool,
+    dry_run: bool,
+) -> dict[str, str]:
+    """Move/copy every row's image into dest_dir. Returns {original: final} names."""
+    mapping: dict[str, str] = {}
+    for name in rows[filename_col].to_list():
+        src = src_dir / name
+        if not src.exists():
+            print(f"  skip (missing): {name}")
+            continue
+        final = unique_path(dest_dir / name)
+        mapping[name] = final.name
+        verb = "copy" if copy else "move"
+        print(f"  {verb}: {name} -> {dest_dir.name}/{final.name}")
+        if not dry_run:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            if copy:
+                shutil.copy2(src, final)
+            else:
+                shutil.move(str(src), str(final))
+    return mapping
+
+
+def merge_into_csv(
+    rows: pl.DataFrame, dest_dir: Path, csv: str, filename_col: str, dry_run: bool
+) -> None:
+    dest_path = dest_dir / csv
+    if dest_path.exists():
+        existing = load_metadata(dest_dir, csv, filename_col)
+        combined = pl.concat([existing, rows], how="diagonal_relaxed").unique(
+            subset=filename_col, keep="last", maintain_order=True
+        )
+    else:
+        combined = rows
+    if not dry_run:
+        save_metadata(combined, dest_dir, csv, filename_col)
+
+
+# --------------------------------------------------------------------------- #
+# stratified splitting
+# --------------------------------------------------------------------------- #
+def _labels(n: int, ratios: list[float], names: list[str]) -> list[str]:
+    counts = [round(r * n) for r in ratios]
+    counts[-1] = n - sum(counts[:-1])
+    out: list[str] = []
+    for name, c in zip(names, counts):
+        out.extend([name] * max(c, 0))
+    return out[:n] + [names[-1]] * (n - len(out))
+
+
+def add_split_column(
+    df: pl.DataFrame,
+    ratios: list[float],
+    names: list[str],
+    stratify: str | None,
+    seed: int,
+    filename_col: str,
+) -> pl.DataFrame:
+    groups = df.partition_by(stratify, maintain_order=True) if stratify else [df]
+    labeled = []
+    for part in groups:
+        shuffled = part.sample(fraction=1.0, shuffle=True, seed=seed)
+        shuffled = shuffled.with_columns(pl.Series("split", _labels(shuffled.height, ratios, names)))
+        labeled.append(shuffled.select([filename_col, "split"]))
+    mapping = pl.concat(labeled)
+    return df.drop("split", strict=False).join(mapping, on=filename_col, how="left")
+
+
+# --------------------------------------------------------------------------- #
+# subcommands
+# --------------------------------------------------------------------------- #
+def cmd_sync(
+    directory: Path, csv: str, filename_col: str,
+    set_pair: list[str] | None, prune: bool,
+) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    images = find_images(directory)
+    if prune:
+        df = df.filter(pl.col(filename_col).is_in(images))
+    existing = set(df[filename_col].to_list())
+    new = [n for n in images if n not in existing]
+    if new:
+        df = pl.concat([df, pl.DataFrame({filename_col: new})], how="diagonal")
+
+    if set_pair:
+        column, value = set_pair
+        if column not in df.columns:
+            df = df.with_columns(pl.lit(None, dtype=pl.Utf8).alias(column))
+        df = df.with_columns(
+            pl.when(pl.col(column).is_null()).then(pl.lit(value))
+            .otherwise(pl.col(column)).alias(column)
+        )
+    save_metadata(df, directory, csv, filename_col)
+    print(f"synced {csv}: {df.height} rows, {len(new)} added")
+
+
+def cmd_info(directory: Path, csv: str, filename_col: str, column: str | None) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    images = set(find_images(directory))
+    rows = set(df[filename_col].to_list())
+    print(f"{csv}: {df.height} rows, {len(df.columns)} columns")
+    print(f"images on disk: {len(images)}")
+    print(f"  in both:     {len(rows & images)}")
+    print(f"  only in csv: {len(rows - images)}")
+    print(f"  only on disk:{len(images - rows)}")
+    cols = [column] if column else [c for c in df.columns if c != filename_col]
+    for c in cols:
+        if c not in df.columns:
+            raise SystemExit(f"error: unknown column {c!r}")
+        nulls = df[c].null_count()
+        print(f"\n[{c}] dtype={df[c].dtype} nulls={nulls}")
+        vc = df.group_by(c).len().sort("len", descending=True).head(10)
+        for value, n in vc.iter_rows():
+            print(f"  {value!r}: {n}")
+
+
+def cmd_check(directory: Path, csv: str, filename_col: str, fix: bool) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    images = set(find_images(directory))
+    rows = df[filename_col].to_list()
+    missing = sorted(set(rows) - images)
+    untracked = sorted(images - set(rows))
+    dupes = (
+        df.group_by(filename_col).len().filter(pl.col("len") > 1)[filename_col].to_list()
+    )
+    for label, items in (("csv rows without files", missing),
+                         ("images without rows", untracked),
+                         ("duplicate filenames", dupes)):
+        print(f"{label}: {len(items)}")
+        for x in items[:20]:
+            print(f"  {x}")
+        if len(items) > 20:
+            print(f"  ... and {len(items) - 20} more")
+    if fix and (missing or untracked):
+        cmd_sync(directory, csv, filename_col, None, prune=True)
+
+
+def cmd_list(directory: Path, csv: str, filename_col: str,
+             wheres: list[str], columns: list[str] | None) -> None:
+    df = select_rows(load_metadata(directory, csv, filename_col), wheres, allow_all=True)
+    show = [filename_col, *(columns or [])]
+    for row in df.select(show).iter_rows():
+        print("\t".join("" if v is None else str(v) for v in row))
+
+
+def cmd_set(directory: Path, csv: str, filename_col: str,
+            column: str, value: str, wheres: list[str], only_missing: bool) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    if column not in df.columns:
+        df = df.with_columns(pl.lit(None, dtype=pl.Utf8).alias(column))
+    match = reduce(lambda a, b: a & b, (_condition(w, df.columns) for w in _split_wheres(wheres))) \
+        if wheres else pl.lit(True)
+    if only_missing:
+        match = match & pl.col(column).is_null()
+    df = df.with_columns(
+        pl.when(match).then(pl.lit(value)).otherwise(pl.col(column)).alias(column)
+    )
+    save_metadata(df, directory, csv, filename_col)
+    print(f"set {column}={value!r} where matched")
+
+
+def cmd_move(directory: Path, csv: str, filename_col: str, dest: str,
+             wheres: list[str], all_rows: bool, copy: bool, update_csv: bool,
+             dry_run: bool, yes: bool) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    sel = select_rows(df, wheres, allow_all=all_rows)
+    if sel.is_empty():
+        print("no rows matched")
+        return
+    dest_dir = Path(dest) if Path(dest).is_absolute() else directory / dest
+    verb = "copy" if copy else "move"
+    if not confirm(f"{verb} {sel.height} images to {dest_dir}?", yes or dry_run):
+        print("aborted")
+        return
+    mapping = transfer(sel, directory, dest_dir, filename_col, copy, dry_run)
+    if not mapping:
+        return
+    if update_csv:
+        moved = sel.filter(pl.col(filename_col).is_in(list(mapping))).with_columns(
+            pl.col(filename_col).replace(mapping)
+        )
+        merge_into_csv(moved, dest_dir, csv, filename_col, dry_run)
+    if not copy and not dry_run:
+        remaining = df.filter(~pl.col(filename_col).is_in(list(mapping)))
+        save_metadata(remaining, directory, csv, filename_col)
+    print(f"{verb}d {len(mapping)} images")
+
+
+def cmd_delete(directory: Path, csv: str, filename_col: str,
+               wheres: list[str], all_rows: bool, hard: bool, dry_run: bool, yes: bool) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    sel = select_rows(df, wheres, allow_all=all_rows)
+    if sel.is_empty():
+        print("no rows matched")
+        return
+    how = "permanently delete" if hard else "trash"
+    if not confirm(f"{how} {sel.height} images?", yes or dry_run):
+        print("aborted")
+        return
+    trash = directory / TRASH_DIRNAME
+    deleted: list[str] = []
+    for name in sel[filename_col].to_list():
+        src = directory / name
+        if not src.exists():
+            print(f"  skip (missing): {name}")
+            continue
+        deleted.append(name)
+        print(f"  {'delete' if hard else 'trash'}: {name}")
+        if dry_run:
+            continue
+        if hard:
+            src.unlink()
+        else:
+            trash.mkdir(exist_ok=True)
+            shutil.move(str(src), str(unique_path(trash / name)))
+    if not dry_run:
+        remaining = df.filter(~pl.col(filename_col).is_in(deleted))
+        save_metadata(remaining, directory, csv, filename_col)
+    print(f"removed {len(deleted)} images")
+
+
+def cmd_split(directory: Path, csv: str, filename_col: str, ratios: list[float],
+              names: list[str] | None, stratify: str | None, seed: int,
+              move: bool, update_csv: bool, dry_run: bool, yes: bool) -> None:
+    if names is None:
+        names = {2: ["train", "val"], 3: ["train", "val", "test"]}.get(len(ratios))
+        if names is None:
+            raise SystemExit("error: provide --names to match the number of --ratios")
+    if len(names) != len(ratios):
+        raise SystemExit("error: --names and --ratios must have equal length")
+    df = load_metadata(directory, csv, filename_col)
+    if stratify and stratify not in df.columns:
+        raise SystemExit(f"error: unknown --stratify column {stratify!r}")
+    labeled = add_split_column(df, ratios, names, stratify, seed, filename_col)
+
+    if not move:
+        save_metadata(labeled, directory, csv, filename_col)
+        summary = labeled.group_by("split").len().sort("split")
+        print(f"wrote 'split' column: {dict(summary.iter_rows())}")
+        return
+
+    if not confirm(f"move images into {len(names)} subfolders under {directory}?", yes or dry_run):
+        print("aborted")
+        return
+    for name in names:
+        rows = labeled.filter(pl.col("split") == name)
+        if rows.is_empty():
+            continue
+        sub = directory / name
+        mapping = transfer(rows, directory, sub, filename_col, copy=False, dry_run=dry_run)
+        if update_csv:
+            moved = rows.filter(pl.col(filename_col).is_in(list(mapping))).with_columns(
+                pl.col(filename_col).replace(mapping)
+            )
+            merge_into_csv(moved, sub, csv, filename_col, dry_run)
+
+
+def cmd_sample(directory: Path, csv: str, filename_col: str, dest: str,
+               n: int | None, frac: float | None, stratify: str | None, seed: int,
+               move: bool, update_csv: bool, dry_run: bool, yes: bool) -> None:
+    if (n is None) == (frac is None):
+        raise SystemExit("error: pass exactly one of -n / --frac")
+    df = load_metadata(directory, csv, filename_col)
+    if stratify and stratify not in df.columns:
+        raise SystemExit(f"error: unknown --stratify column {stratify!r}")
+
+    def take(part: pl.DataFrame) -> pl.DataFrame:
+        if frac is not None:
+            return part.sample(fraction=frac, shuffle=True, seed=seed)
+        return part.sample(n=min(n, part.height), shuffle=True, seed=seed)
+
+    groups = df.partition_by(stratify, maintain_order=True) if stratify else [df]
+    sel = pl.concat([take(g) for g in groups])
+    if sel.is_empty():
+        print("no rows sampled")
+        return
+    dest_dir = Path(dest) if Path(dest).is_absolute() else directory / dest
+    verb = "move" if move else "copy"
+    if not confirm(f"{verb} {sel.height} sampled images to {dest_dir}?", yes or dry_run):
+        print("aborted")
+        return
+    mapping = transfer(sel, directory, dest_dir, filename_col, copy=not move, dry_run=dry_run)
+    if update_csv:
+        moved = sel.filter(pl.col(filename_col).is_in(list(mapping))).with_columns(
+            pl.col(filename_col).replace(mapping)
+        )
+        merge_into_csv(moved, dest_dir, csv, filename_col, dry_run)
+    if move and not dry_run:
+        remaining = df.filter(~pl.col(filename_col).is_in(list(mapping)))
+        save_metadata(remaining, directory, csv, filename_col)
+    print(f"sampled {len(mapping)} images")
+
+
+def cmd_col(directory: Path, csv: str, filename_col: str,
+            action: str, names: list[str], default: str | None) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    if action == "add":
+        name = names[0]
+        if name in df.columns:
+            raise SystemExit(f"error: column {name!r} already exists")
+        df = df.with_columns(pl.lit(default, dtype=pl.Utf8).alias(name))
+    elif action == "drop":
+        name = names[0]
+        if name == filename_col:
+            raise SystemExit("error: refusing to drop the filename column")
+        if name not in df.columns:
+            raise SystemExit(f"error: unknown column {name!r}")
+        df = df.drop(name)
+    elif action == "rename":
+        if len(names) != 2:
+            raise SystemExit("error: col rename expects OLD NEW")
+        old, new = names
+        if old not in df.columns:
+            raise SystemExit(f"error: unknown column {old!r}")
+        df = df.rename({old: new})
+    save_metadata(df, directory, csv, filename_col)
+    print(f"col {action}: {' '.join(names)}")
+
+
+def cmd_rename(directory: Path, csv: str, filename_col: str, template: str,
+               wheres: list[str], start: int, dry_run: bool, yes: bool) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    sel = select_rows(df, wheres, allow_all=True)
+    if sel.is_empty():
+        print("no rows matched")
+        return
+    if not confirm(f"rename {sel.height} files with template {template!r}?", yes or dry_run):
+        print("aborted")
+        return
+    mapping: dict[str, str] = {}
+    i = start
+    for row in sel.iter_rows(named=True):
+        old = row[filename_col]
+        src = directory / old
+        if not src.exists():
+            print(f"  skip (missing): {old}")
+            continue
+        ext = Path(old).suffix
+        fields = {**{k: ("" if v is None else v) for k, v in row.items()},
+                  "index": i, "stem": Path(old).stem, "ext": ext, "name": old}
+        try:
+            rendered = template.format(**fields)
+        except (KeyError, ValueError) as e:
+            raise SystemExit(f"error: bad --template field {e}")
+        new = rendered if Path(rendered).suffix else rendered + ext
+        i += 1
+        if new == old:
+            continue
+        dst = unique_path(directory / new)
+        mapping[old] = dst.name
+        print(f"  rename: {old} -> {dst.name}")
+        if not dry_run:
+            src.rename(dst)
+    if mapping and not dry_run:
+        df = df.with_columns(pl.col(filename_col).replace(mapping))
+        save_metadata(df, directory, csv, filename_col)
+    print(f"renamed {len(mapping)} files")
+
+
+def cmd_export(directory: Path, csv: str, filename_col: str, by: str, dest: str,
+               move: bool, dry_run: bool, yes: bool) -> None:
+    df = load_metadata(directory, csv, filename_col)
+    if by not in df.columns:
+        raise SystemExit(f"error: unknown --by column {by!r}")
+    dest_dir = Path(dest) if Path(dest).is_absolute() else directory / dest
+    verb = "move" if move else "copy"
+    if not confirm(f"{verb} images into class folders under {dest_dir}?", yes or dry_run):
+        print("aborted")
+        return
+    moved_all: list[str] = []
+    for part in df.partition_by(by, maintain_order=True):
+        value = part[by][0]
+        sub = dest_dir / (str(value) if value is not None else "__none__")
+        mapping = transfer(part, directory, sub, filename_col, copy=not move, dry_run=dry_run)
+        moved_all.extend(mapping)
+    if move and not dry_run:
+        remaining = df.filter(~pl.col(filename_col).is_in(moved_all))
+        save_metadata(remaining, directory, csv, filename_col)
+    print(f"exported {len(moved_all)} images by {by!r}")
+
+
+def cmd_import(directory: Path, csv: str, filename_col: str, src: str,
+               column: str, move: bool, dry_run: bool, yes: bool) -> None:
+    src_dir = Path(src) if Path(src).is_absolute() else directory / src
+    subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
+    if not subdirs:
+        raise SystemExit(f"error: no class subfolders in {src_dir}")
+    verb = "move" if move else "copy"
+    if not confirm(f"{verb} images from {len(subdirs)} class folders into {directory}?",
+                   yes or dry_run):
+        print("aborted")
+        return
+    total = 0
+    for sub in subdirs:
+        images = find_images(sub)
+        if not images:
+            continue
+        rows = pl.DataFrame({filename_col: images})
+        mapping = transfer(rows, sub, directory, filename_col, copy=not move, dry_run=dry_run)
+        labeled = pl.DataFrame({filename_col: list(mapping.values()),
+                                column: [sub.name] * len(mapping)})
+        merge_into_csv(labeled, directory, csv, filename_col, dry_run)
+        total += len(mapping)
+    print(f"imported {total} images into column {column!r}")
+
+
+def cmd_merge(sources: list[str], into: str, csv: str, filename_col: str,
+              move: bool, dry_run: bool, yes: bool) -> None:
+    dest_dir = Path(into)
+    verb = "move" if move else "copy"
+    if not confirm(f"{verb} {len(sources)} datasets into {dest_dir}?", yes or dry_run):
+        print("aborted")
+        return
+    total = 0
+    for src in sources:
+        src_dir = Path(src)
+        if (src_dir / csv).exists():
+            sdf = load_metadata(src_dir, csv, filename_col)
+        else:
+            sdf = pl.DataFrame({filename_col: find_images(src_dir)})
+        mapping = transfer(sdf, src_dir, dest_dir, filename_col, copy=not move, dry_run=dry_run)
+        moved = sdf.filter(pl.col(filename_col).is_in(list(mapping))).with_columns(
+            pl.col(filename_col).replace(mapping)
+        )
+        merge_into_csv(moved, dest_dir, csv, filename_col, dry_run)
+        total += len(mapping)
+    print(f"merged {total} images from {len(sources)} datasets")
+
+
+# --------------------------------------------------------------------------- #
+# cli
+# --------------------------------------------------------------------------- #
+EXAMPLES = """\
+common usage:
+  imdata sync --set split unlabeled     # add new images, seed a column
+  imdata info                           # counts, orphans, column stats
+  imdata check --fix                    # reconcile csv <-> disk
+  imdata list --where "score>=0.8" --column label
+  imdata set label cat --where "caption~kitten" --only-missing
+  imdata move dogs --where "label=dog"  # move matching images + rows
+  imdata delete --where "score<0.2"     # -> .trash/ (--hard to unlink)
+  imdata split --ratios 0.8 0.1 0.1 --stratify label
+  imdata sample preview -n 50 --stratify label
+  imdata col add source --default roboflow
+  imdata rename "{label}_{index:04d}"   # extension kept automatically
+  imdata export out --by label          # ImageFolder layout from a column
+  imdata import classdirs --column label # dataset from class subfolders
+  imdata merge ds_a ds_b --into combined
+
+Add --dry-run to preview any file operation. Run `imdata CMD -h` for details.
+"""
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="imdata", description=__doc__, epilog=EXAMPLES,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    base = argparse.ArgumentParser(add_help=False)
+    base.add_argument("--dir", type=Path, default=Path.cwd(), help="dataset directory (default: cwd)")
+    base.add_argument("--csv", default="metadata.csv", help="metadata filename (default: metadata.csv)")
+    base.add_argument("--filename-col", default="filename", help="filename column (default: filename)")
+
+    where = argparse.ArgumentParser(add_help=False)
+    where.add_argument("--where", action="append", default=[], metavar="COND",
+                       help="row filter, e.g. 'label=cat' or 'split=train&score>=0.8' "
+                            "(repeatable and '&'-joinable, AND-combined)")
+
+    danger = argparse.ArgumentParser(add_help=False)
+    danger.add_argument("--dry-run", action="store_true", help="show actions without changing anything")
+    danger.add_argument("-y", "--yes", action="store_true", help="skip confirmation prompt")
+
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("sync", parents=[base], help="add new images / prune missing rows")
+    p.add_argument("--set", nargs=2, metavar=("COL", "VALUE"), help="fill COL with VALUE where missing")
+    p.add_argument("--no-prune", dest="prune", action="store_false", help="keep rows for missing files")
+
+    sub.add_parser("info", parents=[base], help="summarize rows, orphans, column stats").add_argument(
+        "--column", help="focus on a single column")
+
+    sub.add_parser("check", parents=[base], help="report csv/disk inconsistencies").add_argument(
+        "--fix", action="store_true", help="run sync to reconcile")
+
+    p = sub.add_parser("list", parents=[base, where], help="print filenames matching --where")
+    p.add_argument("--column", action="append", default=[], help="also print this column (repeatable)")
+
+    p = sub.add_parser("set", parents=[base, where], help="set a column value on matching rows")
+    p.add_argument("column")
+    p.add_argument("value")
+    p.add_argument("--only-missing", action="store_true", help="only set where currently null")
+
+    p = sub.add_parser("move", parents=[base, where, danger], help="move/copy matching images to DEST")
+    p.add_argument("dest")
+    p.add_argument("--all", dest="all_rows", action="store_true", help="operate on every row")
+    p.add_argument("--copy", action="store_true", help="copy instead of move")
+    p.add_argument("--no-csv", dest="update_csv", action="store_false",
+                   help="don't write/merge rows into the destination's metadata csv")
+
+    p = sub.add_parser("delete", parents=[base, where, danger], help="delete matching images + rows")
+    p.add_argument("--all", dest="all_rows", action="store_true", help="operate on every row")
+    p.add_argument("--hard", action="store_true", help="unlink instead of moving to .trash/")
+
+    p = sub.add_parser("split", parents=[base, danger], help="assign train/val/test")
+    p.add_argument("--ratios", nargs="+", type=float, default=[0.8, 0.1, 0.1])
+    p.add_argument("--names", nargs="+", help="split names (default train/val[/test])")
+    p.add_argument("--stratify", help="keep this column's distribution across splits")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--move", action="store_true", help="move files into subfolders instead of a column")
+    p.add_argument("--no-csv", dest="update_csv", action="store_false",
+                   help="don't write/merge rows into each subfolder's metadata csv (with --move)")
+
+    p = sub.add_parser("sample", parents=[base, danger], help="copy/move a random subset to DEST")
+    p.add_argument("dest")
+    p.add_argument("-n", type=int, help="number of images")
+    p.add_argument("--frac", type=float, help="fraction of images (0-1)")
+    p.add_argument("--stratify", help="sample proportionally within this column")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--move", action="store_true", help="move instead of copy")
+    p.add_argument("--no-csv", dest="update_csv", action="store_false",
+                   help="don't write/merge rows into the destination's metadata csv")
+
+    p = sub.add_parser("col", parents=[base], help="add / drop / rename a column")
+    p.add_argument("action", choices=["add", "drop", "rename"])
+    p.add_argument("names", nargs="+", metavar="NAME", help="column name(s): add NAME | drop NAME | rename OLD NEW")
+    p.add_argument("--default", help="default value for 'col add'")
+
+    p = sub.add_parser("rename", parents=[base, where, danger], help="rename files from a template")
+    p.add_argument("template", help="e.g. '{label}_{index:04d}' (extension kept automatically)")
+    p.add_argument("--start", type=int, default=1, help="starting value for {index} (default: 1)")
+
+    p = sub.add_parser("export", parents=[base, danger], help="write class-subfolder layout from a column")
+    p.add_argument("dest")
+    p.add_argument("--by", required=True, help="column whose value names each subfolder")
+    p.add_argument("--move", action="store_true", help="move instead of copy")
+
+    p = sub.add_parser("import", parents=[base, danger], help="build a dataset from class subfolders")
+    p.add_argument("src", help="folder containing one subfolder per class")
+    p.add_argument("--column", default="label", help="column name for the class (default: label)")
+    p.add_argument("--move", action="store_true", help="move instead of copy")
+
+    p = sub.add_parser("merge", parents=[base, danger], help="combine several datasets into one")
+    p.add_argument("sources", nargs="+", help="source dataset directories")
+    p.add_argument("--into", required=True, help="destination directory")
+    p.add_argument("--move", action="store_true", help="move instead of copy")
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    c = args.command
+    if c == "sync":
+        cmd_sync(args.dir, args.csv, args.filename_col, args.set, args.prune)
+    elif c == "info":
+        cmd_info(args.dir, args.csv, args.filename_col, args.column)
+    elif c == "check":
+        cmd_check(args.dir, args.csv, args.filename_col, args.fix)
+    elif c == "list":
+        cmd_list(args.dir, args.csv, args.filename_col, args.where, args.column)
+    elif c == "set":
+        cmd_set(args.dir, args.csv, args.filename_col, args.column, args.value,
+                args.where, args.only_missing)
+    elif c == "move":
+        cmd_move(args.dir, args.csv, args.filename_col, args.dest, args.where,
+                 args.all_rows, args.copy, args.update_csv, args.dry_run, args.yes)
+    elif c == "delete":
+        cmd_delete(args.dir, args.csv, args.filename_col, args.where, args.all_rows,
+                   args.hard, args.dry_run, args.yes)
+    elif c == "split":
+        cmd_split(args.dir, args.csv, args.filename_col, args.ratios, args.names,
+                  args.stratify, args.seed, args.move, args.update_csv, args.dry_run, args.yes)
+    elif c == "sample":
+        cmd_sample(args.dir, args.csv, args.filename_col, args.dest, args.n, args.frac,
+                   args.stratify, args.seed, args.move, args.update_csv, args.dry_run, args.yes)
+    elif c == "col":
+        cmd_col(args.dir, args.csv, args.filename_col, args.action, args.names, args.default)
+    elif c == "rename":
+        cmd_rename(args.dir, args.csv, args.filename_col, args.template, args.where,
+                   args.start, args.dry_run, args.yes)
+    elif c == "export":
+        cmd_export(args.dir, args.csv, args.filename_col, args.by, args.dest,
+                   args.move, args.dry_run, args.yes)
+    elif c == "import":
+        cmd_import(args.dir, args.csv, args.filename_col, args.src, args.column,
+                   args.move, args.dry_run, args.yes)
+    elif c == "merge":
+        cmd_merge(args.sources, args.into, args.csv, args.filename_col,
+                  args.move, args.dry_run, args.yes)
+
+
+if __name__ == "__main__":
+    main()

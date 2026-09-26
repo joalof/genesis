@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Unpack a Roboflow dataset zip and flatten it into:
+#   project_name/
+#       metadata.csv
+#       img1.jpg
+#       img2.jpg
+#       ...
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 <roboflow_dataset.zip>" >&2
+    exit 1
+}
+
+if [[ $# -ne 1 ]]; then
+    usage
+fi
+
+zip_path="$1"
+
+if [[ ! -f "$zip_path" ]]; then
+    echo "Error: file not found: $zip_path" >&2
+    exit 1
+fi
+
+zip_base="$(basename "$zip_path")"
+project_dir="${zip_base%.zip}"
+
+mkdir -p "$project_dir"
+unzip -q -o "$zip_path" -d "$project_dir"
+
+# Concatenate every subfolder's _classes.csv into a single metadata.csv,
+# keeping the header from only the first file.
+metadata_csv="$project_dir/metadata.csv"
+rm -f "$metadata_csv"
+
+first=1
+while IFS= read -r -d '' csv_file; do
+    if [[ $first -eq 1 ]]; then
+        cat "$csv_file" > "$metadata_csv"
+        first=0
+    else
+        tail -n +2 "$csv_file" >> "$metadata_csv"
+    fi
+done < <(find "$project_dir" -mindepth 2 -name "_classes.csv" -print0)
+
+# _classes.csv files have been folded into metadata.csv; drop the originals.
+find "$project_dir" -mindepth 2 -name "_classes.csv" -delete
+
+# Move all remaining files (images) up to the top level.
+find "$project_dir" -mindepth 2 -type f -print0 |
+    while IFS= read -r -d '' f; do
+        mv -n "$f" "$project_dir/"
+    done
+
+rm -f "$project_dir/README.dataset.txt"
+rm -f "$project_dir/README.roboflow.txt"
+
+# Remove now-empty split subdirectories (train/valid/test).
+find "$project_dir" -mindepth 1 -type d -empty -delete
+
+echo "Unpacked '$zip_path' into '$project_dir/'"
