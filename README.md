@@ -1,37 +1,35 @@
 # Genesis
-This repo contains shell scripts for setting up my preferred development environment on a new system. 
+My dotfiles and the setup of my preferred development environment, declared for [mise](https://mise.jdx.dev) and applied with `mise bootstrap`.
 
 Supports:
-* Ubuntu-derivatives 
+* Ubuntu-derivatives
 
 ## Quickstart
-To get started run `./genesis` and choose what you want to install.
+On a fresh machine:
+```sh
+curl https://mise.run | sh
+~/.local/bin/mise bootstrap --from https://github.com/joalof/genesis.git --from-dir ~/code/genesis -E wayland
+```
+Pass `-E x11` instead on X11. On an existing checkout run `mise bootstrap -C ~/code/genesis -E wayland`, use `--dry-run` to preview, and `mise bootstrap status` to see what's out of sync.
 
-## Configuration
-Certain settings can be customized via the `config.json` file such as which github repo to install dotfiles from (must be chezmoi-compliant) and default installation directories.
-
-## App system
-Installation scripts for apps and tool chains are organized in the following directory structre:
+## Layout
 ```
 .
-├── apps
-│   ├── app1
-│   │   ├── install.sh
-│   │   └── manifest.json
-│   ├── app2
-│   │   ├── install.sh
-│   │   └── manifest.json
-
+├── mise.toml            # machine setup: directories, apt packages, dotfiles, hooks, bootstrap task
+├── mise.wayland.toml    # display-server specific packages, selected with -E
+├── mise.x11.toml
+├── home/                # dotfiles, mirrors ~
+├── scripts/             # post-install scripts (docker, kanata)
+└── mise-tasks/          # source builds (neovim, ghostty)
 ```
-Here, `manifest.json` contains a minimal set of metadata required for `genesis` to manage the installation process.
-```json {
-    "name": "app_name",
-    "dependencies": ["dep1_app_name", "dep2_app_name"],
-    "artifacts": ["binary1", "script2"],
-    "platforms": ["linux", "wsl"]
-}
-```
-Note that the dependencies are listed using their app name as defined in the manifest, not with binaries. 
 
-### Where are apps installed?
-Genesis sets up a local FHS system under a configurable directory `LOCAL_FHS` (by default `~/.local`) as well as a *flat* application directory `APPS` which defaults to `~/apps`. Applications that are built from source or downloaded as archives are then installed into `APPS` from where binaries and libraries etc are symlinked into `LOCAL_FHS` by the `symfarm` script. This has various benefits like making applications easy to uninstall (just run `symfarm -D path/to/app`).
+`mise bootstrap` runs, in order: apt packages, the docker script, directories, dotfiles, tools, and finally the `bootstrap` task, which installs claude and builds any missing source-built apps. Every step can run again, so bootstrap is safe to re-run; hooks, `postinstall` scripts and the `bootstrap` task must stay idempotent to keep it that way.
+
+## Dotfiles
+Every file under `home/` is symlinked to the same path under `~`, so editing a dotfile edits the repo directly. To track a new file, move it into `home/` and run `mise bootstrap -C ~/code/genesis --only dotfiles`.
+
+## Tools
+Tools are declared in `home/.config/mise/config.toml`, which becomes the global mise config. Add a tool there and run `mise install`.
+
+### Where are source-built apps installed?
+Apps that are built from source (`mise run build-neovim`, `mise run build-ghostty`) are installed into a *flat* application directory `~/apps`, from where binaries and libraries etc are symlinked into `~/.local` by the `symfarm` script (in `home/.local/bin`). This makes them easy to uninstall (just run `symfarm -D path/to/app`).

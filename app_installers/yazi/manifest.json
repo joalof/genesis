@@ -1,6 +1,0 @@
-{
-    "name": "yazi",
-    "dependencies": ["rust"],
-    "artifacts": ["yazi"],
-    "platforms": ["linux", "wsl"]
-}

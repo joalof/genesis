@@ -1,0 +1,86 @@
+# Machine setup: `mise bootstrap -C ~/code/genesis -E <wayland|x11>`
+# Tools live in home/.config/mise/config.toml, which [dotfiles] links into place.
+
+# --- Directory structure
+# modes match the default umask so bootstrap doesn't chmod existing dirs
+[bootstrap.directories."~/.local/bin"]
+mode = "0775"
+[bootstrap.directories."~/.local/lib"]
+mode = "0775"
+[bootstrap.directories."~/.local/lib64"]
+mode = "0775"
+[bootstrap.directories."~/.local/include"]
+mode = "0775"
+[bootstrap.directories."~/.local/etc"]
+mode = "0775"
+[bootstrap.directories."~/.local/man"]
+mode = "0775"
+[bootstrap.directories."~/.local/src"]
+mode = "0775"
+[bootstrap.directories."~/.local/share"]
+mode = "0700"
+[bootstrap.directories."~/.config"]
+mode = "0775"
+[bootstrap.directories."~/apps"]
+mode = "0775"
+[bootstrap.directories."~/code"]
+mode = "0775"
+[bootstrap.directories."~/projects"]
+mode = "0775"
+[bootstrap.directories."~/scratch"]
+mode = "0775"
+
+# --- System packages
+[bootstrap.packages]
+"apt:libclang-dev" = "latest"
+"apt:python-is-python3" = "latest"
+"apt:python3-venv" = "latest"
+"apt:build-essential" = "latest"
+"apt:ninja-build" = "latest"
+"apt:cmake" = "latest"
+"apt:autoconf" = "latest"
+"apt:automake" = "latest"
+"apt:libtool" = "latest"
+"apt:pkg-config" = "latest"
+"apt:software-properties-common" = "latest"
+"apt:apt-transport-https" = "latest"
+"apt:ca-certificates" = "latest"
+"apt:gnupg" = "latest"
+"apt:lsb-release" = "latest"
+"apt:gettext" = "latest"
+"apt:rename" = "latest"
+"apt:unzip" = "latest"
+"apt:curl" = "latest"
+"apt:wget" = "latest"
+"apt:git" = "latest"
+"apt:strace" = "latest"
+"apt:jq" = "latest"
+"apt:ripgrep" = "latest"
+"apt:htop" = "latest"
+"apt:tree" = "latest"
+"apt:keychain" = "latest"
+"apt:libgtk-4-dev" = "latest"      # ghostty
+"apt:libadwaita-1-dev" = "latest"  # ghostty
+"apt:feh" = "latest"
+"apt:zathura" = "latest"
+"apt:ffmpeg" = "latest"
+
+# --- Dotfiles
+# every file under home/ is symlinked to the same path under ~
+[dotfiles]
+"~" = { source = "home", mode = "symlink-each" }
+
+# --- Hooks (run from this directory, and again on every bootstrap)
+[bootstrap.hooks]
+post_packages = "bash scripts/docker.sh"
+
+# --- Everything mise can't install declaratively; runs last
+[tasks.bootstrap]
+description = "Install claude and build source-built apps that are missing"
+run = '''
+command -v claude > /dev/null || curl -fsSL https://claude.ai/install.sh | bash
+[ -x ~/apps/neovim/bin/nvim ] || mise run build-neovim
+if [ -z "${WSL_DISTRO_NAME:-}" ] && [ ! -x ~/apps/ghostty/bin/ghostty ]; then
+    mise run build-ghostty
+fi
+'''

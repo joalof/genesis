@@ -1,6 +1,0 @@
-{
-    "name": "eza",
-    "dependencies": ["rust"],
-    "artifacts": ["eza"],
-    "platforms": ["linux", "wsl"]
-}

@@ -1,6 +1,0 @@
-{
-    "name": "claude",
-    "dependencies": [],
-    "artifacts": ["claude"],
-    "platforms": ["linux", "wsl"]
-}

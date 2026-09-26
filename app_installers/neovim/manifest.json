@@ -1,6 +1,0 @@
-{
-    "name": "neovim",
-    "dependencies": ["tree-sitter-cli", "nvm"],
-    "artifacts": ["nvim"],
-    "platforms": ["linux", "wsl"]
-}

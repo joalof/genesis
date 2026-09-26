@@ -1,6 +1,0 @@
-{
-    "name": "zig",
-    "dependencies": [],
-    "artifacts": ["zig"],
-    "platforms": ["linux"]
-}

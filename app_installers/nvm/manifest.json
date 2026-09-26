@@ -1,6 +1,0 @@
-{
-    "name": "nvm",
-    "dependencies": [],
-    "artifacts": ["node"],
-    "platforms": ["linux", "wsl"]
-}

@@ -1,6 +1,0 @@
-{
-    "name": "docker",
-    "dependencies": [],
-    "artifacts": ["docker"],
-    "platforms": ["linux", "wsl"]
-}
