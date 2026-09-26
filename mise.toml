@@ -66,9 +66,11 @@ mode = "0775"
 "apt:ffmpeg" = "latest"
 
 # --- Dotfiles
-# every file under home/ is symlinked to the same path under ~
+# every file under home/ is symlinked to the same path under ~, except
+# ~/.config/nvim, which is linked whole so plugin specs can be moved around in place
 [dotfiles]
-"~" = { source = "home", mode = "symlink-each" }
+"~" = { source = "home", mode = "symlink-each", exclude = [".config/nvim"] }
+"~/.config/nvim" = { source = "home/.config/nvim", mode = "symlink" }
 
 # --- Hooks (run from this directory, and again on every bootstrap)
 [bootstrap.hooks]
