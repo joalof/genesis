@@ -11,7 +11,9 @@ idiomatic_version_file_enable_tools = ["rust", "node"]
 node = "lts"
 go = "latest"
 # rust-analyzer ships as a rustup component so it always matches the toolchain
-rust = { version = "stable", components = ["rust-analyzer", "rust-src", "clippy", "rustfmt"] }
+# mise sets up rustup without a default toolchain, which breaks cargo: tools
+# installed in the same run
+rust = { version = "stable", components = ["rust-analyzer", "rust-src", "clippy", "rustfmt"], postinstall = "rustup default stable" }
 uv = "latest"  # aqua: needed to bootstrap the pypi: backend; uv provisions Python
 zig = "0.15.2"
 "npm:typescript" = "latest"
