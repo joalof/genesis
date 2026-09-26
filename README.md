@@ -26,7 +26,7 @@ Pass `-E x11` instead on X11. On an existing checkout run `mise bootstrap -C ~/c
 `mise bootstrap` runs, in order: apt packages, the docker script, directories, dotfiles, tools, the kanata (uinput) script, and finally the `bootstrap` task, which installs claude and builds any missing source-built apps. Every step can run again, so bootstrap is safe to re-run; hooks, `postinstall` scripts and the `bootstrap` task must stay idempotent to keep it that way.
 
 ## Dotfiles
-Every file under `home/` is symlinked to the same path under `~`, so editing a dotfile edits the repo directly. To track a new file, move it into `home/` and run `mise bootstrap -C ~/code/genesis --only dotfiles`.
+Every file under `home/` is symlinked to the same path under `~`, so editing a dotfile edits the repo directly. The exception is `~/.config/nvim`, which is a single symlink to the whole directory, so files can be moved or added there without re-running bootstrap. To track a new file, move it into `home/` and run `mise bootstrap -C ~/code/genesis --only dotfiles`.
 
 ## Tools
 Tools are declared in `home/.config/mise/config.toml`, which becomes the global mise config. Add a tool there and run `mise install`.
