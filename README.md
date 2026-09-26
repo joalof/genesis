@@ -32,4 +32,4 @@ Every file under `home/` is symlinked to the same path under `~`, so editing a d
 Tools are declared in `home/.config/mise/config.toml`, which becomes the global mise config. Add a tool there and run `mise install`.
 
 ### Where are source-built apps installed?
-Apps that are built from source (`mise run build-neovim`, `mise run build-ghostty`) are installed into a *flat* application directory `~/apps`, from where binaries and libraries etc are symlinked into `~/.local` by the `symfarm` script (in `home/.local/bin`). This makes them easy to uninstall (just run `symfarm -D path/to/app`).
+Apps that are built from source (`mise run build-neovim`, `mise run build-ghostty`) are installed into a *flat* application directory `~/apps`. Neovim is put on PATH by a `path:` entry in the mise config. Ghostty's binaries, desktop entry, completions etc are symlinked into `~/.local` by the `symfarm` script (in `home/.local/bin`), which makes it easy to uninstall (just run `symfarm -D path/to/app`).

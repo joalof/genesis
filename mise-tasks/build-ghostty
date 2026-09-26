@@ -39,4 +39,5 @@ rm -rf "${src_dir}"
 # swap in only on success — preserves the old install if the build fails
 rm -rf "$INSTALL_DIR"
 mv "$STAGING_DIR" "$INSTALL_DIR"
+# links bin/ plus the desktop entry, icons, dbus service and completions into ~/.local
 symfarm "${INSTALL_DIR}"
