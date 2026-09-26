@@ -3,18 +3,23 @@
 # Runs as a mise bootstrap hook on every bootstrap, so every step must be safe to repeat.
 set -euo pipefail
 
-keyring=/usr/share/keyrings/docker-archive-keyring.gpg
-sources=/etc/apt/sources.list.d/docker.list
+keyring=/etc/apt/keyrings/docker.asc
 
-if [[ ! -f $keyring ]]; then
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o "$keyring"
-fi
-
-if [[ ! -f $sources ]]; then
+# skip if the repo is configured in any form: a second entry with a different
+# signing key makes apt refuse to read its sources at all
+if ! grep -rqs download.docker.com /etc/apt/sources.list /etc/apt/sources.list.d/; then
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$keyring"
+    sudo chmod a+r "$keyring"
     # derivatives (mint, pop) report their own codename, docker only knows ubuntu's
     . /etc/os-release
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=$keyring] https://download.docker.com/linux/ubuntu ${UBUNTU_CODENAME:-$VERSION_CODENAME} stable" \
-        | sudo tee "$sources" > /dev/null
+    sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}
+Components: stable
+Signed-By: $keyring
+EOF
     sudo apt-get update
 fi
 
