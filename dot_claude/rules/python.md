@@ -1,23 +1,3 @@
----
-paths:
-  - "**/*.py"
----
-
-- Use `uv` exclusively (never pip/poetry/pipenv); use `uvx` for PyPI tools
-- When I ask you to write a self-contained script it must use PEP 723 inline dependencies:
-
-```python
-#!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.8"
-# dependencies = ["requests>=2.28", "click>=8.0"]
-# ///
-
-import requests
-import click
-```
-
-* Run self-contained scripts with: `uvx --script <file.py>`
-* Use Black for formatting and Ruff for linting
-* Use type hints for function signatures and prefer modern syntax for builtin types: don't import `List, Dict, ...` from `typing`, instead use, e.g., `list[float]`.
-* Use pathlib for filesystem operations
+* Always include typehints using modern type hint syntax if the python version allows it. This means using, e.g., `list[int]` instead of importing `List` from typing, and using `|` instead of `Optional`.
+* When you write one-off scripts assume that an appropriate python environment exists, you don't need to verify that packages you want to use are available, leave that to me.
+* Prefer polars over pandas unless we have a very good reason for using pandas.

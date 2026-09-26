@@ -1,26 +1,7 @@
 local Path = require("lib.path").Path
 
--- adapted from https://github.com/rijulkap/dotfiles/blob/master/nvim/lua/plugins/lsp.lua
+
 vim.g.lsp_servers = {
-    -- basedpyright = {
-    --     settings = {
-    --         basedpyright = {
-    --             analysis = {
-    --                 autoImportCompletions = false,
-    --                 typeCheckingMode = "basic",
-    --                 useLibraryCodeForTypes = true,
-    --                 diagnosticMode = "openFilesOnly",
-    --                 autoSearchPaths = true,
-    --                 stubPath = vim.uv.os_homedir() .. "/.local/share/stubs",
-    --             },
-    --         },
-    --         python = {
-    --             pythonPath = vim.fn.exepath("python"),
-    --             venvPath = Path(vim.env["VIRTUAL_ENV"]):parent().filename,
-    --             venv = Path(vim.env["VIRTUAL_ENV"]):name(),
-    --         },
-    --     },
-    -- },
     ty = {
         settings = {
             ty = {
@@ -104,6 +85,7 @@ vim.g.lsp_servers = {
             },
         },
     },
+    -- mojo = {},
 }
 
 vim.g.other_mason_servers = { "stylua" }

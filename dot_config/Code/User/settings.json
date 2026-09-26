@@ -1,11 +1,11 @@
 {
   "security.workspace.trust.untrustedFiles": "open",
   "editor.fontFamily": "'JetBrains Mono NF'",
-  "editor.fontSize": 16,
+  "editor.fontSize": 14,
   "editor.fontLigatures": true,
   "editor.tabSize": 4,
   "editor.fontWeight": "500",
-  "window.zoomLevel": 0.5,
+  "window.zoomLevel": 0,
   "editor.insertSpaces": true,
   "editor.quickSuggestions": {
     "other": true,
@@ -17,6 +17,7 @@
   },
   "editor.detectIndentation": true,
   "editor.minimap.enabled": false,
+  "python.defaultInterpreterPath": "/home/joakim/.local/venv/vion-torch/bin/python",
   "editor.formatOnSave": true,
   "editor.stickyScroll.enabled": true,
   "[python]": {
@@ -196,5 +197,7 @@
   "git.openRepositoryInParentFolders": "always",
   "python.analysis.typeCheckingMode": "basic",
   "terminal.integrated.stickyScroll.enabled": false,
-  "extensions.ignoreRecommendations": true
+  "extensions.ignoreRecommendations": true,
+  "claudeCode.preferredLocation": "panel",
+  "notebook.lineNumbers": "on"
 }

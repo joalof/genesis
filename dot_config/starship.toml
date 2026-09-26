@@ -1,11 +1,11 @@
+scan_timeout = 80
+
 [cmd_duration]
 disabled = true
 
 [python]
-# Replace the default Python symbol (currently "🐍") with a snake symbol
-# symbol = "🐍"
 # The format string - this will show the snake symbol followed by the environment name in brackets
-format = "via [$symbol$virtualenv]($style) "
+format = "[$symbol$virtualenv]($style) "
 # Make the Python section visible even if there's no python files in current directory
 detect_extensions = []
 detect_files = []
@@ -15,4 +15,7 @@ python_binary = "python3"
 style = "bold green"
 
 [gcloud]
+disabled = true
+
+[battery]
 disabled = true
