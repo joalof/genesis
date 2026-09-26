@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Convert between Videolab jsonl and a CSV of annotated intervals.
+
+jsonl format (one asset per line):
+    {"vionlabs_id": "...", "catalog": "...", "predictions": [{"type": "intro", "start": 196.0, "end": 227.0}, ...]}
+
+csv->jsonl ignores any columns beyond vionlabs_id, catalog, and the
+type/start/end columns. jsonl->csv only ever emits those same columns.
+"""
+
+import argparse
+import csv
+import json
+import sys
+from pathlib import Path
+
+
+def parse_timecode(text: str) -> float:
+    text = text.strip()
+    parts = text.split(":")
+    if not 1 <= len(parts) <= 3:
+        raise ValueError(f"unrecognized timecode: {text!r}")
+    seconds = 0.0
+    for part in parts:
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def format_timecode(seconds: float) -> str:
+    if seconds < 0:
+        raise ValueError(f"negative duration: {seconds}")
+    whole = int(seconds)
+    fraction = seconds - whole
+    hours, remainder = divmod(whole, 3600)
+    minutes, secs = divmod(remainder, 60)
+    timecode = f"{hours}:{minutes:02d}:{secs:02d}"
+    if fraction:
+        frac_str = f"{fraction:.6f}".split(".")[1].rstrip("0")
+        timecode += f".{frac_str}"
+    return timecode
+
+
+def csv_to_jsonl(
+    input_path: Path,
+    output_path: Path,
+    type_col: str,
+    start_col: str,
+    end_col: str,
+) -> None:
+    assets: dict[tuple[str, str], list[dict[str, float | str]]] = {}
+
+    with input_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        required = {"vionlabs_id", "catalog", type_col, start_col, end_col}
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise SystemExit(f"csv is missing required columns: {sorted(missing)}")
+
+        num_skipped = 0
+        for line_no, row in enumerate(reader, start=2):
+            if not row[start_col].strip() or not row[end_col].strip():
+                print(f"skipping row {line_no}: missing {start_col!r} or {end_col!r}", file=sys.stderr)
+                num_skipped += 1
+                continue
+            key = (row["vionlabs_id"], row["catalog"])
+            assets.setdefault(key, []).append(
+                {
+                    "type": row[type_col],
+                    "start": parse_timecode(row[start_col]),
+                    "end": parse_timecode(row[end_col]),
+                }
+            )
+
+    with output_path.open("w") as f:
+        for (vionlabs_id, catalog), predictions in assets.items():
+            line = {
+                "vionlabs_id": vionlabs_id,
+                "catalog": catalog,
+                "predictions": predictions,
+            }
+            f.write(json.dumps(line) + "\n")
+
+    print(
+        f"wrote {len(assets)} assets, {sum(len(p) for p in assets.values())} intervals -> {output_path}"
+        + (f" ({num_skipped} rows skipped)" if num_skipped else "")
+    )
+
+
+def jsonl_to_csv(
+    input_path: Path,
+    output_path: Path,
+    type_col: str,
+    start_col: str,
+    end_col: str,
+) -> None:
+    fieldnames = ["catalog", "vionlabs_id", type_col, start_col, end_col]
+    num_assets = 0
+    num_intervals = 0
+    num_skipped = 0
+
+    with input_path.open() as f, output_path.open("w", newline="") as out:
+        writer = csv.DictWriter(out, fieldnames=fieldnames)
+        writer.writeheader()
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            asset = json.loads(line)
+            vionlabs_id = asset.get("vionlabs_id")
+            catalog = asset.get("catalog")
+            if not vionlabs_id or not catalog:
+                print(f"skipping line {line_no}: missing vionlabs_id or catalog", file=sys.stderr)
+                num_skipped += 1
+                continue
+            num_assets += 1
+            for prediction in asset.get("predictions", []):
+                writer.writerow(
+                    {
+                        "catalog": catalog,
+                        "vionlabs_id": vionlabs_id,
+                        type_col: prediction["type"],
+                        start_col: format_timecode(prediction["start"]),
+                        end_col: format_timecode(prediction["end"]),
+                    }
+                )
+                num_intervals += 1
+
+    print(
+        f"wrote {num_assets} assets, {num_intervals} intervals -> {output_path}"
+        + (f" ({num_skipped} lines skipped)" if num_skipped else "")
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("input", type=Path, help="input file, either a .csv or a .jsonl")
+    parser.add_argument(
+        "output",
+        type=Path,
+        nargs="?",
+        help="output file (default: input with extension swapped between .csv and .jsonl)",
+    )
+    parser.add_argument("--type", default="type", help="CSV column name for the interval type (default: type)")
+    parser.add_argument("--start", default="start", help="CSV column name for the start timecode (default: start)")
+    parser.add_argument("--end", default="end", help="CSV column name for the end timecode (default: end)")
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    suffix = args.input.suffix.lower()
+
+    if suffix == ".csv":
+        output = args.output or args.input.with_suffix(".jsonl")
+        csv_to_jsonl(args.input, output, args.type, args.start, args.end)
+    elif suffix == ".jsonl":
+        output = args.output or args.input.with_suffix(".csv")
+        jsonl_to_csv(args.input, output, args.type, args.start, args.end)
+    else:
+        raise SystemExit(f"input must be .csv or .jsonl, got: {args.input}")
+
+
+if __name__ == "__main__":
+    main()

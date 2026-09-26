@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Filter images in a directory by their pixel dimensions.
+
+Filter syntax (one or more, all must match — logical AND):
+
+    <dim><op><value>
+
+    <dim>   w | width | h | height   (case-insensitive)
+    <op>    =  >  <  >=  <=  !=
+    <value> a non-negative integer (pixels)
+
+Whitespace around the operator is allowed. Examples:
+
+    imgfilter ./photos 'w>1920'
+    imgfilter ./photos 'width>=1920' 'height<1080'
+    imgfilter ./photos 'w=h'            # (not supported: value must be a number)
+    imgfilter ./photos 'h != 512'
+
+Output is one image name per line, relative to the search directory, so it
+can be piped straight into another command:
+
+    imgfilter ./photos 'w>=3840' | xargs -I{} mv {} ./4k/
+"""
+
+from __future__ import annotations
+
+import argparse
+import operator
+import re
+import sys
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+from PIL import Image, UnidentifiedImageError
+
+_OPS: dict[str, Callable[[int, int], bool]] = {
+    "=": operator.eq,
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">": operator.gt,
+    "<": operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+}
+
+_DIMS: dict[str, str] = {
+    "w": "width",
+    "width": "width",
+    "h": "height",
+    "height": "height",
+}
+
+# Longest operators first so '>=' wins over '>'.
+_FILTER_RE = re.compile(
+    r"^\s*(?P<dim>[a-zA-Z]+)\s*(?P<op>==|!=|>=|<=|=|>|<)\s*(?P<value>\d+)\s*$"
+)
+
+
+@dataclass(frozen=True)
+class Filter:
+    dim: str  # "width" or "height"
+    op: Callable[[int, int], bool]
+    value: int
+
+    def matches(self, width: int, height: int) -> bool:
+        actual = width if self.dim == "width" else height
+        return self.op(actual, self.value)
+
+
+def parse_filter(spec: str) -> Filter:
+    match = _FILTER_RE.match(spec)
+    if not match:
+        raise ValueError(
+            f"invalid filter {spec!r}; expected e.g. 'w>1920', 'height<=1080'"
+        )
+    dim = match.group("dim").lower()
+    if dim not in _DIMS:
+        raise ValueError(
+            f"invalid dimension {match.group('dim')!r} in {spec!r}; "
+            "use w/width or h/height"
+        )
+    return Filter(
+        dim=_DIMS[dim],
+        op=_OPS[match.group("op")],
+        value=int(match.group("value")),
+    )
+
+
+def iter_matching(directory: Path, filters: list[Filter]) -> Iterator[str]:
+    """Yield names (relative to directory) of images matching all filters."""
+    for entry in sorted(directory.iterdir()):
+        if not entry.is_file():
+            continue
+        try:
+            with Image.open(entry) as img:
+                width, height = img.size
+        except (UnidentifiedImageError, OSError):
+            continue  # not an image / unreadable — skip silently
+        if all(f.matches(width, height) for f in filters):
+            yield entry.name
+
+
+def run(directory: Path, filter_specs: list[str]) -> int:
+    if not directory.is_dir():
+        print(f"error: {directory} is not a directory", file=sys.stderr)
+        return 2
+    try:
+        filters = [parse_filter(spec) for spec in filter_specs]
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    for name in iter_matching(directory, filters):
+        print(name)
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Filter images in a directory by pixel dimensions.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        "directory",
+        type=Path,
+        help="directory to search (non-recursive)",
+    )
+    parser.add_argument(
+        "filters",
+        nargs="+",
+        metavar="FILTER",
+        help="dimension filter, e.g. 'w>1920' or 'height<=1080' (ANDed together)",
+    )
+    args = parser.parse_args()
+    return run(args.directory, args.filters)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
