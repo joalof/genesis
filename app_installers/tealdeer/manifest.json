@@ -1,6 +1,0 @@
-{
-    "name": "tealdeer",
-    "dependencies": ["rust"],
-    "artifacts": ["tldr"],
-    "platforms": ["linux", "wsl"]
-}

@@ -1,35 +1,13 @@
 #!/usr/bin/env bash
+# Give the current user access to /dev/uinput so kanata can run without root.
+# Runs as the postinstall hook of the kanata tool in mise, so it must be safe to repeat.
+# https://github.com/jtroo/kanata/blob/main/docs/setup-linux.md
 set -euo pipefail
 
-# bump this to upgrade: https://github.com/jtroo/kanata/releases
-PINNED_VERSION="1.12.0"
-
-INSTALL_DIR="$HOME/apps/kanata"
-ARCHIVE="linux-binaries-x64.zip"
-# the cmd_allowed variant is the prebuilt equivalent of --features cmd
-BINARY="kanata_linux_cmd_allowed_x64"
-
-url="https://github.com/jtroo/kanata/releases/download/v${PINNED_VERSION}/${ARCHIVE}"
-echo "Downloading kanata ${PINNED_VERSION}: $url"
-curl -fsSL "$url" -o "$ARCHIVE"
-
-STAGING_DIR="${INSTALL_DIR}.new"
-rm -rf "$STAGING_DIR"
-mkdir -p "${STAGING_DIR}/bin"
-
-# the archive is flat and the binaries carry platform suffixes, so extract just the
-# one we want straight to bin/kanata where symfarm expects it
-unzip -p "$ARCHIVE" "$BINARY" > "${STAGING_DIR}/bin/kanata"
-chmod +x "${STAGING_DIR}/bin/kanata"
-rm "$ARCHIVE"
-
-# swap in only on success — preserves the old install if extraction fails
-rm -rf "$INSTALL_DIR"
-mv "$STAGING_DIR" "$INSTALL_DIR"
-symfarm "$INSTALL_DIR"
-
-# Post install setup (idempotent, effectively only does work once per machine)
-# https://github.com/jtroo/kanata/blob/main/docs/setup-linux.md
+if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+    echo "kanata: skipping uinput setup on WSL"
+    exit 0
+fi
 
 user=$(id -un)
 needs_relog=0

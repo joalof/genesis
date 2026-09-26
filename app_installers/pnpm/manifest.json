@@ -1,6 +1,0 @@
-{
-    "name": "pnpm",
-    "dependencies": ["nvm"],
-    "artifacts": ["pnpm", "pnpx"],
-    "platforms": ["linux", "wsl"]
-}

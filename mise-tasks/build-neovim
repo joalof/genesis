@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
+#MISE description="Build neovim nightly from source into ~/apps/neovim"
 set -euo pipefail
-if [ -d neovim ]; then
-    cd neovim/
+
+SRC_DIR="$HOME/.local/src/neovim"
+INSTALL_DIR="$HOME/apps/neovim"
+
+if [[ -d "$SRC_DIR" ]]; then
+    cd "$SRC_DIR"
     git checkout master
     git pull
     git fetch --force --tags
 else
-    git clone https://github.com/neovim/neovim.git
-    cd neovim/
+    git clone https://github.com/neovim/neovim.git "$SRC_DIR"
+    cd "$SRC_DIR"
 fi
 git checkout nightly
-INSTALL_DIR="$HOME/apps/neovim"
+
 STAGING_DIR="${INSTALL_DIR}.new"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"

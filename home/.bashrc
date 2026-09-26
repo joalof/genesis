@@ -233,68 +233,23 @@ export PATH=$HOME/.local/bin:$PATH
 
 #  Apps {{{
 
+# Mise {{{
+# must come before anything below that checks for mise-managed tools
+command -v mise >/dev/null 2>&1 && eval "$(mise activate bash)"
+# }}}
+
 # Python {{{
 export PYTHONBREAKPOINT=ipdb.set_trace
 export TF_CPP_MIN_LOG_LEVEL=3
 
 # }}}
 
-# Rust {{{
-export PATH=$PATH:$HOME/apps/rust/cargo/bin
-export CARGO_HOME=$HOME/apps/rust/cargo
-export RUSTUP_HOME=$HOME/apps/rust/rustup
-
-if [[ -f "$HOME/apps/rust/cargo/env" ]]; then
-    . "$HOME/apps/rust/cargo/env"
-fi
-
-# }}}
-
-# Go {{{
-export PATH=$PATH:$HOME/go/bin
-
-# }}}
-#
 # WSL {{{
 
 if [[ "$is_wsl2" -eq 1 ]] ; then
     export WDESK=/mnt/c/Users/lofgr/Desktop
     export WHOME=/mnt/c/Users/lofgr
 fi
-# }}}
-
-# Mamba {{{
-# export MAMBA_EXE="$HOME/.local/bin/micromamba";
-# export MAMBA_ROOT_PREFIX="$HOME/apps/micromamba";
-# __mamba_setup="$("$MAMBA_EXE" shell hook --shell bash --root-prefix "$MAMBA_ROOT_PREFIX" 2> /dev/null)"
-# if [ $? -eq 0 ]; then
-#     eval "$__mamba_setup"
-# else
-#     alias micromamba="$MAMBA_EXE"  # Fallback on help from mamba activate
-# fi
-# unset __mamba_setup
-#
-# mamba_last_env_file="$HOME/.cache/mamba_last_env"
-# if [[ -f $mamba_last_env_file ]]; then
-#     read -r last_env < $mamba_last_env_file
-#     micromamba activate $last_env
-# fi
-#
-# # Define mamba command to activate/save env and run micromamba
-# mamba () {
-#   micromamba "$@"
-#   if [[ $1 == "activate" || $1 == "deactivate" ]]; then
-#       echo $CONDA_DEFAULT_ENV > ~/.cache/mamba_last_env
-#   fi
-# }
-
-# ----
-# }}}
-
-# Node version manager {{{
-export NVM_DIR="$HOME/apps/nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 # }}}
 
 # FZF {{{
@@ -360,21 +315,13 @@ fi
 export MODAL_ENVIRONMENT='joakim-dev'
 # }}}
 
- # pnpm {{{
-# export PNPM_HOME="/home/autarch/.local/share/pnpm"
-# case ":$PATH:" in
-#   *":$PNPM_HOME:"*) ;;
-#   *) export PATH="$PNPM_HOME:$PATH" ;;
-# esac
-# pnpm end
-# }}}
-
 # Google cloud SDK {{{
-# The next line updates PATH for the Google Cloud SDK.
-if [ -f "$HOME/apps/google-cloud-sdk/path.bash.inc" ]; then . "$HOME/apps/google-cloud-sdk/path.bash.inc"; fi
-
-# The next line enables shell command completion for gcloud.
-if [ -f "$HOME/apps/google-cloud-sdk/completion.bash.inc" ]; then . "$HOME/apps/google-cloud-sdk/completion.bash.inc"; fi
+# gcloud is installed by mise; the completion script lives in the SDK root
+if command -v gcloud >/dev/null 2>&1; then
+    _gcloud_root=$(dirname "$(dirname "$(command -v gcloud)")")
+    [ -f "$_gcloud_root/completion.bash.inc" ] && . "$_gcloud_root/completion.bash.inc"
+    unset _gcloud_root
+fi
 # }}}
 
 # Ezenv {{{

@@ -1,6 +1,0 @@
-{
-    "name": "uv-tools",
-    "dependencies": ["uv"],
-    "artifacts": ["ruff", "black", "dvc", "jupytext"],
-    "platforms": ["linux", "wsl"]
-}
