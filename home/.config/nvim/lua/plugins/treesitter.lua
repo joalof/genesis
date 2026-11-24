@@ -11,7 +11,7 @@ return {
     build = ":TSUpdate",
     opts = {
         highlight = { disable = { csv = true } },
-        indent = { disable = { python = true, lua = true } },
+        indent = { disable = { python = true, lua = true, mojo = true } },
         parsers = {
             bash = true,
             c = true,
@@ -34,6 +34,7 @@ return {
             make = true,
             markdown = true,
             markdown_inline = true,
+            mojo = true,
             python = true,
             query = true,
             regex = true,
@@ -50,6 +51,19 @@ return {
     },
     config = function(_, opts)
         local ts = require("nvim-treesitter")
+
+        -- Parsers not bundled with nvim-treesitter
+        vim.api.nvim_create_autocmd("User", {
+            pattern = "TSUpdate",
+            callback = function()
+                require("nvim-treesitter.parsers").mojo = {
+                    install_info = {
+                        url = "https://github.com/lsh/tree-sitter-mojo",
+                        queries = "queries",
+                    },
+                }
+            end,
+        })
 
         local ensure_installed = vim.tbl_keys(opts.parsers)
         ts.install(ensure_installed)

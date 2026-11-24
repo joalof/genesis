@@ -17,6 +17,10 @@ go = "latest"
 rust = { version = "stable", components = ["rust-analyzer", "rust-src", "clippy", "rustfmt"], postinstall = "rustup default stable" }
 uv = "latest"  # aqua: needed to bootstrap the pypi: backend; uv provisions Python
 zig = "0.15.2"
+# nightly, for the newer LSP. The mojo binary lives in mojo-compiler, so expose it too.
+# The nightly index has no upload dates, so both release-age cutoffs must be off:
+# minimum_release_age for mise, --no-config to skip exclude-newer in ~/.config/uv/uv.toml
+"pypi:mojo" = { version = "latest", prerelease = true, minimum_release_age = "0s", expose = ["mojo-compiler"], registry_url = "https://whl.modular.com/nightly/simple/{}/", uvx_args = "--no-config --prerelease allow --index-strategy unsafe-best-match --extra-index-url https://whl.modular.com/nightly/simple/" }
 "npm:typescript" = "latest"
 
 # --- Editor
@@ -26,6 +30,7 @@ neovim = "path:/home/joakim/apps/neovim"   # self-compiled, see genesis/mise-tas
 # --- Language servers
 "npm:typescript-language-server" = "latest"
 "pypi:ty" = "latest"
+"aqua:LuaLS/lua-language-server" = "latest"
 
 # --- Linters & formatters
 "pypi:ruff" = "latest"
@@ -33,9 +38,6 @@ neovim = "path:/home/joakim/apps/neovim"   # self-compiled, see genesis/mise-tas
 
 # --- Debug adapters (DAP)
 "pypi:debugpy" = "latest"
-
-# --- Coding agents
-"npm:backlog.md" = "latest"
 
 # --- Data & notebooks
 "pypi:dvc" = "latest"

@@ -7,7 +7,21 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "model": "opus[1m]",
+  "model": "opus",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/home/joakim/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "enableArtifact": false,
   "workflowKeywordTriggerEnabled": false,
   "statusLine": {
@@ -34,6 +48,7 @@
   "promptSuggestionEnabled": false,
   "awaySummaryEnabled": false,
   "showClearContextOnPlanAccept": true,
+  "tui": "fullscreen",
   "voice": {
     "enabled": true,
     "mode": "tap"
@@ -43,5 +58,39 @@
   "autoCompactEnabled": false,
   "autoContinueAtUsageLimit": false,
   "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(ty check .:*)",
+      "Bash(lint-imports:*)"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: Vionlabs (GitLab group `Vionlabs1`, repo `Vionlabs1/ml/violin`)",
+      "**Cloud provider(s)**: Google Cloud Platform (GCS buckets, GCP Datastore, GCP VMs referenced in README/CONTRIBUTING)",
+      "**Repository visibility**: assume private (gitlab.com:Vionlabs1/ml/violin — not queryable via gh; no visibility signal suggests public)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: main (default branch per repo facts; branch protection not queryable via gh here)",
+      "**CI/CD deploy targets**: GCS bucket `gs://vion-tools/violin/<tag>/` via pre-push hook (CONTRIBUTING.md) — release artifact sync, not a general deploy target",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: GitLab — origin remote `gitlab.com:Vionlabs1/ml/violin.git` (this repo's trusted remote only)",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: `gs://vion-tools/` (config-derived — not a confirmed upload destination; uploads of local data still require confirmation)",
+      "**Key internal services**: vion-orchestra (internal DAG processing system, runs on Modal; referenced as integration dependency in CLAUDE.md/README)",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: `.env` (gitignored); asset/catalog metadata in GCP Datastore — share only with Vionlabs-cleared audiences",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development (Violin — Vionlabs asset management CLI/TUI)",
+      "**Trusted repo**: this repo (`/home/joakim/projects/tools/violin`) and its origin remote `gitlab.com:Vionlabs1/ml/violin.git`",
+      "**Org-specific CLIs**: `violin` (project CLI/TUI), `gsutil`/`gcloud` (GCP), `lint-imports` (import contract enforcement), `ty`, `ruff` (toolchain, used routinely per transcript mining)",
+      "Routine under this repo's working tree: `ruff check .`, `ty check .`, `lint-imports` (pre-commit checks mandated by CLAUDE.md)"
+    ]
+  },
   "voiceEnabled": true
 }

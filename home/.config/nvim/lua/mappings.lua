@@ -12,6 +12,36 @@ vim.keymap.set("n", "<c-q>", function()
 end)
 vim.keymap.del("n", "<c-l>")
 
+local function yank_file_part(modifier)
+    if vim.api.nvim_buf_get_name(0) == "" then
+        vim.notify("Current buffer has no filename", vim.log.levels.WARN)
+        return
+    end
+    vim.fn.setreg("+", vim.fn.expand("%" .. modifier), "c")
+end
+
+vim.keymap.set("n", "<leader>yf", function()
+    yank_file_part(":p")
+end, { desc = "Yank file path to clipboard" })
+
+vim.keymap.set("n", "<leader>yn", function()
+    yank_file_part(":t")
+end, { desc = "Yank filename to clipboard" })
+
+vim.keymap.set("n", "<leader>yp", function()
+    local directory = vim.api.nvim_buf_get_name(0) ~= "" and vim.fn.expand("%:p:h") or vim.fn.getcwd()
+    local root = vim.fn.systemlist({ "git", "-C", directory, "rev-parse", "--show-toplevel" })
+    if vim.v.shell_error ~= 0 or not root[1] then
+        vim.notify("Current directory is not in a Git project", vim.log.levels.WARN)
+        return
+    end
+    vim.fn.setreg("+", vim.fn.fnamemodify(root[1], ":t"), "c")
+end, { desc = "Yank Git project name to clipboard" })
+
+vim.keymap.set("n", "<leader>yd", function()
+    yank_file_part(":p:h")
+end, { desc = "Yank directory path to clipboard" })
+
 -- splitline
 vim.keymap.set("n", "S", function()
     return [[:keeppatterns substitute/\s*\%#\s*/\r/e <bar> normal! ==k$<CR>]]

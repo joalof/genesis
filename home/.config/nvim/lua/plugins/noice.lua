@@ -48,6 +48,17 @@ local routes = {
     -- code actions: especially annoying with ruff where the fixall code action
     -- is triggered on every format
     -- { filter = { event = "notify", find = "^No code actions available$" }, skip = true },
+    -- mojo-lsp-server reports "Parsing document" progress on every edit
+    {
+        filter = {
+            event = "lsp",
+            kind = "progress",
+            cond = function(msg)
+                return vim.tbl_get(msg.opts, "progress", "client") == "mojo"
+            end,
+        },
+        opts = { skip = true },
+    },
     -- dap
     { filter = { event = "notify", find = "^Session terminated$" }, view = "mini" },
     -- show output of shell commands in a notification

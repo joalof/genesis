@@ -67,7 +67,6 @@ return {
         { "<leader>fc", "<cmd>FzfLua commands<CR>", desc = "Commands" },
         { "<leader>fe", "<cmd>FzfLua diagnostics_document<CR>", desc = "Buffer Diagnostics" },
         { "<leader>fh", "<cmd>FzfLua helptags<CR>", desc = "Help Pages" },
-        { "<leader>fm", "<cmd>FzfLua manpages<CR>", desc = "Man Pages" },
         { "<leader>fk", "<cmd>FzfLua keymaps<CR>", desc = "Key maps" },
         { "<leader>fu", "<cmd>FzfLua undotree<CR>", desc = "Undo History" },
         { "<leader>fl", "<cmd>FzfLua highlights<CR>", desc = "Highlights" },
@@ -96,18 +95,21 @@ return {
             desc = "Find project files",
         },
         { "<leader>fd", "<cmd>FzfLua zoxide<CR>", desc = "Zoxide directories" },
-        { "<leader>fs", "<cmd>FzfLua lsp_document_symbols<CR>", desc = "LSP symbols" },
-        { "<leader>fg", "<cmd>FzfLua grep_project<CR>", desc = "Grep all project files" },
-        { "<leader>fa", "<cmd>FzfLua autocmds<CR>", desc = "autocmds" },
+        { "<leader>fs", "<cmd>FzfLua lsp_document_symbols<CR>", desc = "LSP document symbols" },
+        { "<leader>fS", "<cmd>FzfLua lsp_workspace_symbols<CR>", desc = "LSP workspace symbols" },
+        { "<leader>fo", "<cmd>FzfLua lsp_outgoing_calls<CR>", desc = "LSP outgoing calls" },
+        { "<leader>fi", "<cmd>FzfLua lsp_incoming_calls<CR>", desc = "LSP incoming calls" },
+        { "<leader>fg", "<cmd>FzfLua grep_curbuf<CR>", desc = "Grep current buffer files" },
+        { "<leader>fG", "<cmd>FzfLua grep_project<CR>", desc = "Grep all project files" },
         {
-            ",vd",
+            "<leader>vd",
             function()
                 image_db_picker(".[] | .function_name", "vion-orchestra function")
             end,
             desc = "Pick vion-orchestra function",
         },
         {
-            ",va",
+            "<leader>va",
             function()
                 image_db_picker(".[] | .output_uri", "vion-orchestra artifact")
             end,

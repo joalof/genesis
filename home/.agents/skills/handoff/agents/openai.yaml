@@ -1,0 +1,7 @@
+# Codex-only metadata: SKILL.md is shared with Claude Code (symlinked from home/.claude/skills/handoff)
+interface:
+  display_name: "Handoff"
+  short_description: "Write HANDOFF.md so a fresh session can continue the work"
+
+policy:
+  allow_implicit_invocation: false

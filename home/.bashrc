@@ -357,8 +357,8 @@ fi
 
 # ls aliases
 if [[ -f $(command -v eza) ]] ; then
-    alias ll='eza -alF'
-    alias l='eza -alF'
+    alias ll='eza -al'
+    alias l='eza -al'
     alias ls='eza'
 else
     if [ -x /usr/bin/dircolors ]; then
@@ -401,3 +401,5 @@ alias feh="feh --zoom=50"
 alias gsearch='function _search(){ google-chrome "https://www.google.com/search?q=$(printf "%s+" "$@" | sed "s/+$//")"; }; _search'
 
 # }}}
+# Load violin completion
+[ -f "/home/joakim/.local/share/bash-completion/completions/violin" ] && . "/home/joakim/.local/share/bash-completion/completions/violin"

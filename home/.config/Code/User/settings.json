@@ -199,5 +199,6 @@
   "terminal.integrated.stickyScroll.enabled": false,
   "extensions.ignoreRecommendations": true,
   "claudeCode.preferredLocation": "panel",
-  "notebook.lineNumbers": "on"
+  "notebook.lineNumbers": "on",
+  "claudeCode.hideOnboarding": true
 }

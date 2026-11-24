@@ -67,10 +67,14 @@ mode = "0775"
 
 # --- Dotfiles
 # every file under home/ is symlinked to the same path under ~, except
-# ~/.config/nvim, which is linked whole so plugin specs can be moved around in place
+# ~/.config/nvim, which is linked whole so plugin specs can be moved around in place,
+# and agent skills, which are linked whole because codex skips symlinked SKILL.md files;
+# each skill is shared by codex (~/.agents/skills) and claude (~/.claude/skills)
 [dotfiles]
-"~" = { source = "home", mode = "symlink-each", exclude = [".config/nvim"] }
+"~" = { source = "home", mode = "symlink-each", exclude = [".config/nvim", ".agents/skills"] }
 "~/.config/nvim" = { source = "home/.config/nvim", mode = "symlink" }
+"~/.agents/skills/handoff" = { source = "home/.agents/skills/handoff", mode = "symlink" }
+"~/.claude/skills/handoff" = { source = "home/.agents/skills/handoff", mode = "symlink" }
 
 # --- Hooks (run from this directory, and again on every bootstrap)
 [bootstrap.hooks]
