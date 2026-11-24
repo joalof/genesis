@@ -7,3 +7,7 @@ __pycache__/
 
 # written by lazy.nvim on plugin updates, deliberately untracked
 home/.config/nvim/lazy-lock.json
+home/.config/nvim/lua/nvim.log
+
+# private: ssh config, keys and known_hosts must never be committed
+home/.ssh/

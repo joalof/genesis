@@ -1,6 +1,13 @@
 [user]
     name = Joakim Lofgren
-    email = 
+    # GitHub noreply address by default, so public repos never get the work email
+    email = 37582687+joalof@users.noreply.github.com
+
+# repos with a gitlab.com remote use the work email from a local, untracked file
+[includeIf "hasconfig:remote.*.url:git@gitlab.com:*/**"]
+    path = ~/.gitconfig.work
+[includeIf "hasconfig:remote.*.url:https://gitlab.com/**"]
+    path = ~/.gitconfig.work
 
 [init]
     defaultBranch = main
